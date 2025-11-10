@@ -1,0 +1,46 @@
+{
+  "name": "git-worktree-manager",
+  "version": "1.0.0",
+  "description": "CLI tool for managing Git worktrees efficiently with GitHub integration",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "wt": "./dist/commands/wt.js",
+    "wtlist": "./dist/commands/wtlist.js",
+    "wtclean": "./dist/commands/wtclean.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "git",
+    "worktree",
+    "cli",
+    "github",
+    "developer-tools"
+  ],
+  "author": "David Durika",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "execa": "^9.5.2",
+    "octokit": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.7.2"
+  }
+}

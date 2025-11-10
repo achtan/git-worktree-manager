@@ -10,6 +10,7 @@
 
 import { Command } from 'commander'
 import chalk from 'chalk'
+import ora from 'ora'
 import { basename, dirname, join } from 'node:path'
 import {
   listWorktrees,
@@ -48,12 +49,14 @@ program
   .description('List all worktrees with status')
   .option('--json', 'Output in JSON format')
   .action(async (options: { json?: boolean }) => {
+    const spinner = options.json ? null : ora('Gathering worktree information...').start()
     try {
       // Get repo info
       const repoName = await getRepoName()
       const worktrees = await listWorktrees()
 
       if (worktrees.length === 0) {
+        spinner?.stop()
         console.log(chalk.yellow('No worktrees found'))
         return
       }
@@ -66,6 +69,7 @@ program
       const filteredWorktrees = worktrees.filter((wt) => wt.path.includes(worktreesDir))
 
       if (filteredWorktrees.length === 0) {
+        spinner?.stop()
         console.log(chalk.yellow(`No worktrees found in ${worktreesDir}`))
         return
       }
@@ -96,6 +100,11 @@ program
       // Get current path and default branch
       const currentPath = process.cwd()
       const defaultBranch = await getDefaultBranch()
+
+      // Update spinner for the slow operation
+      if (spinner) {
+        spinner.text = 'Fetching status for worktrees...'
+      }
 
       // Gather info for each worktree
       const worktreeInfos: WorktreeInfo[] = await Promise.all(
@@ -159,6 +168,9 @@ program
           }
         }),
       )
+
+      // Stop spinner before output
+      spinner?.stop()
 
       // Sort by creation time
       worktreeInfos.sort((a, b) => a.creationTime - b.creationTime)
@@ -269,6 +281,7 @@ program
         // No message for 'no-remote' - it's not relevant
       }
     } catch (error) {
+      spinner?.stop()
       if (error instanceof Error) {
         console.error(chalk.red(`Error: ${error.message}`))
       } else {

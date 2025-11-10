@@ -10,6 +10,7 @@
 
 import { Command } from 'commander'
 import chalk from 'chalk'
+import ora from 'ora'
 import { basename, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import {
@@ -61,6 +62,7 @@ program
       dryRun?: boolean
       force?: boolean
     }) => {
+      const spinner = ora()
       try {
         // Check gh CLI availability
         const ghStatus = await isGhCliAvailable()
@@ -74,6 +76,9 @@ program
           console.log('Authenticate with: gh auth login')
           process.exit(1)
         }
+
+        // Start spinner after validation
+        spinner.start('Scanning worktrees...')
 
         // Get repo info
         const repoName = await getRepoName()
@@ -100,12 +105,13 @@ program
         const filteredWorktrees = worktrees.filter((wt) => wt.path.includes(worktreesDir))
 
         if (filteredWorktrees.length === 0) {
+          spinner.stop()
           console.log(chalk.yellow(`No worktrees found in ${worktreesDir}`))
           return
         }
 
-        console.log(chalk.blue(`Searching for merged/closed worktrees in ${repoName}...`))
-        console.log()
+        // Update spinner for PR checking phase
+        spinner.text = 'Checking PR status...'
 
         // Get current worktree path
         const currentPath = await getCurrentWorktreePath()
@@ -146,6 +152,9 @@ program
         // Filter out worktrees with uncommitted changes
         const skipped = cleanable.filter((w) => w.hasUncommittedChanges)
         const toRemove = cleanable.filter((w) => !w.hasUncommittedChanges)
+
+        // Stop spinner before displaying results
+        spinner.stop()
 
         if (cleanable.length === 0) {
           console.log(chalk.green('✓ No merged/closed worktrees found'))
@@ -250,6 +259,7 @@ program
           console.log("Run 'wtlist' to see remaining worktrees.")
         }
       } catch (error) {
+        spinner.stop()
         if (error instanceof Error) {
           console.error(chalk.red(`Error: ${error.message}`))
         } else {

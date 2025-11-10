@@ -10,6 +10,7 @@
 
 import { Command } from 'commander'
 import chalk from 'chalk'
+import ora from 'ora'
 import { join } from 'node:path'
 import {
   getRepoName,
@@ -27,12 +28,16 @@ program
   .argument('<branch-name>', 'Name of the branch to create worktree for')
   .argument('[base-branch]', 'Base branch to create from (default: auto-detected)')
   .action(async (branchName: string, baseBranch?: string) => {
+    const spinner = ora()
     try {
       // Check if branch already exists
       if (await branchExists(branchName)) {
         console.error(chalk.red(`Error: Branch '${branchName}' already exists locally`))
         process.exit(1)
       }
+
+      // Start spinner after validation passes
+      spinner.start('Creating worktree...')
 
       // Get repo name
       const repoName = await getRepoName()
@@ -53,11 +58,15 @@ program
       // Create the worktree
       await createWorktree(branchName, worktreePath, base)
 
+      // Stop spinner before success message
+      spinner.stop()
+
       // Success message
       console.log(chalk.green(`✓ Created worktree for branch '${branchName}'`))
       console.log()
       console.log(chalk.cyan(`cd ${worktreePath}`))
     } catch (error) {
+      spinner.stop()
       if (error instanceof Error) {
         console.error(chalk.red(`Error: ${error.message}`))
       } else {

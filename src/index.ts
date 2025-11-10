@@ -6,4 +6,4 @@
  */
 
 export * from './utils/git.js'
-export { getOctokit, getPRStatus, parseGitHubRepo } from './utils/github.js'
+export { getOctokit, getPRStatus, parseGitHubRepo, isGhCliAvailable } from './utils/github.js'

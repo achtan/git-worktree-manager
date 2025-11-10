@@ -6,39 +6,134 @@
  */
 
 import { Octokit } from 'octokit'
+import { execa } from 'execa'
+
+/**
+ * Check if GitHub CLI is available and authenticated
+ */
+export async function isGhCliAvailable(): Promise<{
+  available: boolean
+  authenticated: boolean
+  error?: string
+}> {
+  try {
+    // Check if gh is installed
+    await execa('gh', ['--version'])
+  } catch {
+    return {
+      available: false,
+      authenticated: false,
+      error: 'gh CLI not installed',
+    }
+  }
+
+  try {
+    // Check if authenticated
+    await execa('gh', ['auth', 'status'])
+    return {
+      available: true,
+      authenticated: true,
+    }
+  } catch {
+    return {
+      available: true,
+      authenticated: false,
+      error: 'gh CLI not authenticated',
+    }
+  }
+}
 
 /**
  * Get authenticated Octokit instance
  * Uses GitHub CLI token from gh auth token
  */
 export async function getOctokit(): Promise<Octokit> {
-  // TODO: Implement GitHub CLI token retrieval
-  // 1. Run `gh auth token` to get existing token
-  // 2. Create and return Octokit instance with token
-  // 3. Handle case where gh CLI is not authenticated
-
-  throw new Error('TODO: Implementation pending')
+  try {
+    const { stdout } = await execa('gh', ['auth', 'token'])
+    const token = stdout.trim()
+    return new Octokit({ auth: token })
+  } catch (error) {
+    throw new Error('GitHub CLI not authenticated. Run: gh auth login')
+  }
 }
 
 /**
  * Get PR status for a branch
  */
 export async function getPRStatus(
-  _owner: string,
-  _repo: string,
-  _branch: string,
+  owner: string,
+  repo: string,
+  branch: string,
 ): Promise<{
   number: number
   state: 'open' | 'closed' | 'merged'
   title: string
   url: string
+  isDraft: boolean
+  checksStatus?: 'success' | 'failure' | 'pending' | 'none'
 } | null> {
-  // TODO: Implement PR status retrieval
-  // 1. Query GitHub API for PRs with head branch
-  // 2. Return PR information if found
-  // 3. Return null if no PR exists
+  try {
+    const octokit = await getOctokit()
 
-  throw new Error('TODO: Implementation pending')
+    const { data: prs } = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      head: `${owner}:${branch}`,
+      state: 'all',
+      per_page: 1,
+    })
+
+    if (prs.length === 0) {
+      return null
+    }
+
+    const pr = prs[0]
+
+    // Check if PR is merged
+    let state: 'open' | 'closed' | 'merged'
+    if (pr.merged_at) {
+      state = 'merged'
+    } else if (pr.state === 'closed') {
+      state = 'closed'
+    } else {
+      state = 'open'
+    }
+
+    // Get check runs status
+    let checksStatus: 'success' | 'failure' | 'pending' | 'none' = 'none'
+    try {
+      const { data: checkRuns } = await octokit.rest.checks.listForRef({
+        owner,
+        repo,
+        ref: pr.head.sha,
+      })
+
+      if (checkRuns.total_count > 0) {
+        const conclusions = checkRuns.check_runs.map((run) => run.conclusion)
+        if (conclusions.some((c) => c === 'failure')) {
+          checksStatus = 'failure'
+        } else if (conclusions.every((c) => c === 'success')) {
+          checksStatus = 'success'
+        } else {
+          checksStatus = 'pending'
+        }
+      }
+    } catch {
+      // Checks might not be available
+      checksStatus = 'none'
+    }
+
+    return {
+      number: pr.number,
+      state,
+      title: pr.title,
+      url: pr.html_url,
+      isDraft: pr.draft || false,
+      checksStatus,
+    }
+  } catch (error) {
+    return null
+  }
 }
 
 /**
@@ -59,11 +154,18 @@ export async function isBranchMerged(
 /**
  * Parse GitHub repository info from git remote URL
  */
-export function parseGitHubRepo(_remoteUrl: string): { owner: string; repo: string } | null {
-  // TODO: Implement GitHub URL parsing
-  // 1. Parse git@github.com:owner/repo.git format
-  // 2. Parse https://github.com/owner/repo.git format
-  // 3. Return owner and repo or null if not a GitHub URL
+export function parseGitHubRepo(remoteUrl: string): { owner: string; repo: string } | null {
+  // SSH format: git@github.com:owner/repo.git
+  const sshMatch = remoteUrl.match(/git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/)
+  if (sshMatch) {
+    return { owner: sshMatch[1], repo: sshMatch[2] }
+  }
 
-  throw new Error('TODO: Implementation pending')
+  // HTTPS format: https://github.com/owner/repo.git
+  const httpsMatch = remoteUrl.match(/https:\/\/github\.com\/([^/]+)\/(.+?)(?:\.git)?$/)
+  if (httpsMatch) {
+    return { owner: httpsMatch[1], repo: httpsMatch[2] }
+  }
+
+  return null
 }

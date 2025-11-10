@@ -5,5 +5,5 @@
  * The actual CLI commands are in the commands/ directory and are used via bin entries.
  */
 
-export * from './utils/git.js';
-export * from './utils/github.js';
+export * from './utils/git.js'
+export { getOctokit, getPRStatus, parseGitHubRepo } from './utils/github.js'

@@ -109,13 +109,20 @@ export async function createWorktree(
 /**
  * Remove a worktree
  */
-export async function removeWorktree(_path: string, _force?: boolean): Promise<void> {
-  // TODO: Implement worktree removal
-  // 1. Run `git worktree remove` with path
-  // 2. Use --force flag if specified
-  // 3. Handle errors (uncommitted changes, locked, etc.)
+export async function removeWorktree(path: string, force?: boolean): Promise<void> {
+  const args = ['worktree', 'remove', path]
+  if (force) {
+    args.push('--force')
+  }
+  await execa('git', args)
+}
 
-  throw new Error('TODO: Implementation pending')
+/**
+ * Delete a local branch
+ */
+export async function deleteBranch(branch: string, force?: boolean): Promise<void> {
+  const flag = force ? '-D' : '-d'
+  await execa('git', ['branch', flag, branch])
 }
 
 /**

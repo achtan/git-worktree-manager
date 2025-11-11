@@ -11,7 +11,10 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { symlink, copyFile, mkdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { execa } from 'execa'
 import {
   getRepoName,
   getDefaultBranch,
@@ -58,11 +61,49 @@ program
       // Create the worktree
       await createWorktree(branchName, worktreePath, base)
 
+      // Copy .env file if it exists in main worktree
+      let envSymlinked = false
+      let settingsCopied = false
+      try {
+        const { stdout: mainWorktreeRoot } = await execa('git', [
+          'rev-parse',
+          '--show-toplevel',
+        ])
+        const mainRoot = mainWorktreeRoot.trim()
+
+        // Symlink .env file
+        const sourceEnvPath = join(mainRoot, '.env')
+        const targetEnvPath = join(worktreePath, '.env')
+
+        if (existsSync(sourceEnvPath)) {
+          await symlink(sourceEnvPath, targetEnvPath)
+          envSymlinked = true
+        }
+
+        // Copy .claude/settings.local.json file
+        const sourceSettingsPath = join(mainRoot, '.claude', 'settings.local.json')
+        const targetSettingsPath = join(worktreePath, '.claude', 'settings.local.json')
+
+        if (existsSync(sourceSettingsPath)) {
+          await mkdir(dirname(targetSettingsPath), { recursive: true })
+          await copyFile(sourceSettingsPath, targetSettingsPath)
+          settingsCopied = true
+        }
+      } catch (error) {
+        // Silently skip if files don't exist or operations fail
+      }
+
       // Stop spinner before success message
       spinner.stop()
 
       // Success message
       console.log(chalk.green(`✓ Created worktree for branch '${branchName}'`))
+      if (envSymlinked) {
+        console.log(chalk.gray('  Symlinked .env from main worktree'))
+      }
+      if (settingsCopied) {
+        console.log(chalk.gray('  Copied .claude/settings.local.json from main worktree'))
+      }
       console.log()
       console.log(chalk.cyan(`cd ${worktreePath}`))
     } catch (error) {

@@ -6,9 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "wt": "./dist/commands/wt.js",
-    "wtlist": "./dist/commands/wtlist.js",
-    "wtclean": "./dist/commands/wtclean.js"
+    "wt": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",

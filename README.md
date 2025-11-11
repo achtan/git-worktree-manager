@@ -36,15 +36,19 @@ npm run build
 ## Commands
 
 ### `wt <branch-name> [base-branch]`
+### `wt new <branch-name> [base-branch]`
 
 Create a new worktree for a new branch. Worktrees are created in `../<repo>-worktrees/` directory.
 
 ```bash
-# Create worktree from default branch (main/develop)
+# Create worktree from default branch (shorthand)
 wt feature/new-feature
 
+# Create worktree from default branch (explicit)
+wt new feature/new-feature
+
 # Create worktree from specific base branch
-wt feature/new-feature develop
+wt new feature/new-feature develop
 ```
 
 **Arguments:**
@@ -56,17 +60,19 @@ wt feature/new-feature develop
 - Converts slashes in branch names to dashes for directory names (e.g., `feature/foo` → `feature-foo`)
 - Shows spinner during creation
 - Fails if branch already exists locally
+- Symlinks `.env` file from main worktree if present
+- Copies `.claude/settings.local.json` from main worktree if present
 
-### `wtlist`
+### `wt list`
 
 List all worktrees with their status, PR information, and branch details.
 
 ```bash
 # List all worktrees with status
-wtlist
+wt list
 
 # JSON output format
-wtlist --json
+wt list --json
 ```
 
 **Options:**
@@ -96,22 +102,22 @@ bugfix-login                             merged (↑0 ↓2)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Summary: 2 worktrees (1 open, 1 merged)
-💡 Run 'wtclean' to remove 1 merged/closed worktree(s)
+💡 Run 'wt clean' to remove 1 merged/closed worktree(s)
 ```
 
-### `wtclean`
+### `wt clean`
 
 Remove worktrees for branches with merged or closed PRs. Interactive with confirmation prompts.
 
 ```bash
 # Clean up merged/closed worktrees (with confirmation)
-wtclean
+wt clean
 
 # Dry run to see what would be removed
-wtclean --dry-run
+wt clean --dry-run
 
 # Skip confirmation prompt
-wtclean --force
+wt clean --force
 ```
 
 **Options:**
@@ -175,8 +181,8 @@ The tool will show helpful error messages if:
 ### Without GitHub
 
 The tool works without GitHub integration, but with limited functionality:
-- `wtlist` will show "no-pr" status for all worktrees
-- `wtclean` requires GitHub CLI and won't work without it
+- `wt list` will show "no-pr" status for all worktrees
+- `wt clean` requires GitHub CLI and won't work without it
 
 ## Workflow Example
 
@@ -198,11 +204,11 @@ git push -u origin feature/add-auth
 gh pr create --title "Add authentication" --body "Implements user auth"
 
 # Check status of all worktrees
-wtlist
+wt list
 # Shows: feature-add-auth (open)
 
 # After PR is merged, clean up
-wtclean
+wt clean
 # Removes merged worktree and optionally deletes branch
 ```
 
@@ -232,10 +238,11 @@ npm run format
 ```
 git-worktree-manager/
 ├── src/
+│   ├── cli.ts        # Main CLI entry point
 │   ├── commands/     # CLI command implementations
-│   │   ├── wt.ts
-│   │   ├── wtlist.ts
-│   │   └── wtclean.ts
+│   │   ├── new.ts    # Create worktree command
+│   │   ├── list.ts   # List worktrees command
+│   │   └── clean.ts  # Clean worktrees command
 │   └── utils/        # Utility functions
 │       ├── git.ts    # Git operations
 │       └── github.ts # GitHub API helpers

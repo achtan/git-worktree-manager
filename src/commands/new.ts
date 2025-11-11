@@ -6,7 +6,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { join, dirname } from 'node:path'
-import { symlink, copyFile, mkdir } from 'node:fs/promises'
+import { symlink, copyFile, mkdir, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { execa } from 'execa'
 import {
@@ -87,7 +87,34 @@ export function newCommand() {
           // Silently skip if files don't exist or operations fail
         }
 
-        // Stop spinner before success message
+        // Check for and execute post-worktree-created hook
+        try {
+          const packageJsonPath = join(worktreePath, 'package.json')
+          if (existsSync(packageJsonPath)) {
+            const packageJsonContent = await readFile(packageJsonPath, 'utf-8')
+            const packageJson = JSON.parse(packageJsonContent)
+
+            const hookScript = packageJson.scripts?.['post-worktree-created']
+            if (hookScript) {
+              spinner.stop()
+              console.log(chalk.blue(`→ Running post-worktree-created: ${hookScript}`))
+              spinner.start('Executing hook...')
+
+              await execa('npm', ['run', 'post-worktree-created'], {
+                cwd: worktreePath,
+              })
+
+              spinner.stop()
+              console.log(chalk.green('✓ Post-worktree hook completed'))
+            }
+          }
+        } catch (error) {
+          spinner.stop()
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          console.log(chalk.yellow(`⚠ Warning: Post-worktree hook failed: ${errorMessage}`))
+        }
+
+        // Stop spinner before success message (if not already stopped)
         spinner.stop()
 
         // Success message

@@ -7,6 +7,7 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { basename, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
+import { readdirSync, statSync, existsSync, rmSync } from 'node:fs'
 import {
   listWorktrees,
   getRepoName,
@@ -25,6 +26,74 @@ interface CleanableWorktree {
   branch: string
   prState: 'merged' | 'closed'
   hasUncommittedChanges: boolean
+}
+
+interface AbandonedFolder {
+  path: string
+  dirname: string
+  fileCount: number
+  folderCount: number
+}
+
+/**
+ * Count files and folders in a directory
+ */
+function countContents(dirPath: string): { fileCount: number; folderCount: number } {
+  let fileCount = 0
+  let folderCount = 0
+
+  try {
+    const entries = readdirSync(dirPath)
+    for (const entry of entries) {
+      const fullPath = join(dirPath, entry)
+      const stat = statSync(fullPath)
+      if (stat.isDirectory()) {
+        folderCount++
+      } else {
+        fileCount++
+      }
+    }
+  } catch {
+    // If we can't read the directory, return 0s
+  }
+
+  return { fileCount, folderCount }
+}
+
+/**
+ * Find abandoned folders in worktrees directory
+ */
+function findAbandonedFolders(worktreesDir: string): AbandonedFolder[] {
+  const abandoned: AbandonedFolder[] = []
+
+  if (!existsSync(worktreesDir)) {
+    return abandoned
+  }
+
+  try {
+    const entries = readdirSync(worktreesDir)
+    for (const entry of entries) {
+      const fullPath = join(worktreesDir, entry)
+      const stat = statSync(fullPath)
+
+      if (stat.isDirectory()) {
+        const gitPath = join(fullPath, '.git')
+        if (!existsSync(gitPath)) {
+          const { fileCount, folderCount } = countContents(fullPath)
+          abandoned.push({
+            path: fullPath,
+            dirname: entry,
+            fileCount,
+            folderCount,
+          })
+        }
+      }
+    }
+  } catch {
+    // If we can't read the worktrees directory, return empty array
+  }
+
+  return abandoned
 }
 
 /**
@@ -147,23 +216,29 @@ export function cleanCommand() {
           const skipped = cleanable.filter((w) => w.hasUncommittedChanges)
           const toRemove = cleanable.filter((w) => !w.hasUncommittedChanges)
 
+          // Find abandoned folders
+          spinner.text = 'Scanning for abandoned folders...'
+          const abandonedFolders = findAbandonedFolders(worktreesDir)
+
           // Stop spinner before displaying results
           spinner.stop()
 
-          if (cleanable.length === 0) {
-            console.log(chalk.green('✓ No merged/closed worktrees found'))
+          if (cleanable.length === 0 && abandonedFolders.length === 0) {
+            console.log(chalk.green('✓ No merged/closed worktrees or abandoned folders found'))
             return
           }
 
           // Show what will be removed
-          console.log(chalk.bold('Cleanable worktrees:'))
-          console.log()
-
-          for (const wt of toRemove) {
-            const stateColor = wt.prState === 'merged' ? chalk.magenta : chalk.magenta
-            console.log(`${stateColor(wt.dirname)} (${wt.prState.toUpperCase()})`)
-            console.log(`  Branch: ${wt.branch}`)
+          if (toRemove.length > 0) {
+            console.log(chalk.bold('Cleanable worktrees:'))
             console.log()
+
+            for (const wt of toRemove) {
+              const stateColor = wt.prState === 'merged' ? chalk.magenta : chalk.magenta
+              console.log(`${stateColor(wt.dirname)} (${wt.prState.toUpperCase()})`)
+              console.log(`  Branch: ${wt.branch}`)
+              console.log()
+            }
           }
 
           // Show skipped worktrees
@@ -177,7 +252,18 @@ export function cleanCommand() {
             }
           }
 
-          if (toRemove.length === 0) {
+          // Show abandoned folders
+          if (abandonedFolders.length > 0) {
+            console.log(chalk.bold('Abandoned folders (no .git):'))
+            console.log()
+            for (const folder of abandonedFolders) {
+              console.log(chalk.cyan(folder.dirname))
+              console.log(chalk.gray(`  Contents: ${folder.fileCount} files, ${folder.folderCount} folders`))
+              console.log()
+            }
+          }
+
+          if (toRemove.length === 0 && abandonedFolders.length === 0) {
             console.log(chalk.yellow('No worktrees can be removed (all have uncommitted changes)'))
             return
           }
@@ -185,16 +271,28 @@ export function cleanCommand() {
           // Dry run mode
           if (options.dryRun) {
             console.log('━'.repeat(60))
-            console.log(chalk.blue(`[DRY RUN] Would remove ${toRemove.length} worktree(s)`))
+            if (toRemove.length > 0 && abandonedFolders.length > 0) {
+              console.log(chalk.blue(`[DRY RUN] Would remove ${toRemove.length} worktree(s) and ${abandonedFolders.length} abandoned folder(s)`))
+            } else if (toRemove.length > 0) {
+              console.log(chalk.blue(`[DRY RUN] Would remove ${toRemove.length} worktree(s)`))
+            } else {
+              console.log(chalk.blue(`[DRY RUN] Would remove ${abandonedFolders.length} abandoned folder(s)`))
+            }
             return
           }
 
           // Confirm with user
           if (!options.force) {
             console.log('━'.repeat(60))
-            const confirmed = await confirm(
-              chalk.bold(`Remove ${toRemove.length} worktree(s)?`),
-            )
+            let confirmMessage = ''
+            if (toRemove.length > 0 && abandonedFolders.length > 0) {
+              confirmMessage = `Remove ${toRemove.length} worktree(s) and ${abandonedFolders.length} abandoned folder(s)?`
+            } else if (toRemove.length > 0) {
+              confirmMessage = `Remove ${toRemove.length} worktree(s)?`
+            } else {
+              confirmMessage = `Remove ${abandonedFolders.length} abandoned folder(s)?`
+            }
+            const confirmed = await confirm(chalk.bold(confirmMessage))
             if (!confirmed) {
               console.log(chalk.yellow('Cancelled'))
               return
@@ -205,6 +303,8 @@ export function cleanCommand() {
           // Remove worktrees
           let removed = 0
           let failed = 0
+          let abandonedRemoved = 0
+          let abandonedFailed = 0
 
           for (const wt of toRemove) {
             try {
@@ -241,15 +341,45 @@ export function cleanCommand() {
             }
           }
 
+          // Remove abandoned folders
+          for (const folder of abandonedFolders) {
+            try {
+              rmSync(folder.path, { recursive: true, force: true })
+              console.log(chalk.green(`✓ Removed abandoned folder: ${folder.dirname}`))
+              console.log()
+              abandonedRemoved++
+            } catch (error) {
+              console.log(chalk.red(`✗ Failed to remove: ${folder.dirname}`))
+              if (error instanceof Error) {
+                console.log(chalk.red(`  ${error.message}`))
+              }
+              console.log()
+              abandonedFailed++
+            }
+          }
+
           // Summary
           console.log('━'.repeat(60))
-          if (removed > 0) {
+
+          const totalRemoved = removed + abandonedRemoved
+
+          if (removed > 0 && abandonedRemoved > 0) {
+            console.log(chalk.green(`✓ Cleaned up ${removed} worktree(s) and ${abandonedRemoved} abandoned folder(s)!`))
+          } else if (removed > 0) {
             console.log(chalk.green(`✓ Cleaned up ${removed} worktree(s)!`))
+          } else if (abandonedRemoved > 0) {
+            console.log(chalk.green(`✓ Cleaned up ${abandonedRemoved} abandoned folder(s)!`))
           }
-          if (failed > 0) {
+
+          if (failed > 0 && abandonedFailed > 0) {
+            console.log(chalk.red(`✗ Failed to remove ${failed} worktree(s) and ${abandonedFailed} abandoned folder(s)`))
+          } else if (failed > 0) {
             console.log(chalk.red(`✗ Failed to remove ${failed} worktree(s)`))
+          } else if (abandonedFailed > 0) {
+            console.log(chalk.red(`✗ Failed to remove ${abandonedFailed} abandoned folder(s)`))
           }
-          if (removed > 0) {
+
+          if (totalRemoved > 0) {
             console.log("Run 'wt list' to see remaining worktrees.")
           }
         } catch (error) {

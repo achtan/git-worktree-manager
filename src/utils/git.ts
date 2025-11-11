@@ -234,3 +234,37 @@ export async function getCurrentWorktreePath(): Promise<string> {
 export function isPathInWorktree(currentPath: string, worktreePath: string): boolean {
   return currentPath.startsWith(worktreePath)
 }
+
+/**
+ * Check if branch has unpushed commits
+ * Returns { hasUnpushed: boolean, noRemote: boolean }
+ */
+export async function hasUnpushedCommits(
+  branch: string,
+): Promise<{ hasUnpushed: boolean; noRemote: boolean }> {
+  try {
+    // Check if branch has a remote tracking branch
+    const { stdout: remoteBranch } = await execa('git', [
+      'rev-parse',
+      '--abbrev-ref',
+      `${branch}@{upstream}`,
+    ])
+
+    if (!remoteBranch.trim()) {
+      return { hasUnpushed: false, noRemote: true }
+    }
+
+    // Check if there are commits not pushed to remote
+    const { stdout } = await execa('git', [
+      'rev-list',
+      '--count',
+      `${remoteBranch.trim()}..${branch}`,
+    ])
+
+    const unpushedCount = parseInt(stdout.trim(), 10)
+    return { hasUnpushed: unpushedCount > 0, noRemote: false }
+  } catch {
+    // No upstream branch configured
+    return { hasUnpushed: false, noRemote: true }
+  }
+}

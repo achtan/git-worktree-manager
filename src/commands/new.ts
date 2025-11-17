@@ -6,8 +6,8 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { join, dirname } from 'node:path'
-import { symlink, copyFile, mkdir, readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { symlink, copyFile, mkdir, readFile, cp, readdir } from 'node:fs/promises'
+import { existsSync, statSync } from 'node:fs'
 import { execa } from 'execa'
 import {
   getRepoName,
@@ -58,6 +58,7 @@ export function newCommand() {
         // Copy .env file if it exists in main worktree
         let envSymlinked = false
         let settingsCopied = false
+        let ideaSettingsCopied = false
         try {
           const { stdout: mainWorktreeRoot } = await execa('git', [
             'rev-parse',
@@ -82,6 +83,50 @@ export function newCommand() {
             await mkdir(dirname(targetSettingsPath), { recursive: true })
             await copyFile(sourceSettingsPath, targetSettingsPath)
             settingsCopied = true
+          }
+
+          // Copy WebStorm .idea settings (whitelisted files only)
+          const sourceIdeaPath = join(mainRoot, '.idea')
+          const targetIdeaPath = join(worktreePath, '.idea')
+
+          if (existsSync(sourceIdeaPath)) {
+            // Ensure target .idea directory exists
+            await mkdir(targetIdeaPath, { recursive: true })
+
+            // Whitelisted directories to copy
+            const dirsTocp = ['runConfigurations', 'codeStyles', 'inspectionProfiles', 'scopes']
+            for (const dir of dirsTocp) {
+              const sourceDir = join(sourceIdeaPath, dir)
+              const targetDir = join(targetIdeaPath, dir)
+              if (existsSync(sourceDir) && statSync(sourceDir).isDirectory()) {
+                await cp(sourceDir, targetDir, { recursive: true })
+                ideaSettingsCopied = true
+              }
+            }
+
+            // Whitelisted files to copy
+            const filesToCopy = ['modules.xml', 'vcs.xml', 'encodings.xml', 'misc.xml']
+            for (const file of filesToCopy) {
+              const sourceFile = join(sourceIdeaPath, file)
+              const targetFile = join(targetIdeaPath, file)
+              if (existsSync(sourceFile)) {
+                await copyFile(sourceFile, targetFile)
+                ideaSettingsCopied = true
+              }
+            }
+
+            // Copy all .iml files
+            const ideaFiles = await readdir(sourceIdeaPath)
+            for (const file of ideaFiles) {
+              if (file.endsWith('.iml')) {
+                const sourceFile = join(sourceIdeaPath, file)
+                const targetFile = join(targetIdeaPath, file)
+                if (existsSync(sourceFile)) {
+                  await copyFile(sourceFile, targetFile)
+                  ideaSettingsCopied = true
+                }
+              }
+            }
           }
         } catch (error) {
           // Silently skip if files don't exist or operations fail
@@ -124,6 +169,9 @@ export function newCommand() {
         }
         if (settingsCopied) {
           console.log(chalk.gray('  Copied .claude/settings.local.json from main worktree'))
+        }
+        if (ideaSettingsCopied) {
+          console.log(chalk.gray('  Copied WebStorm settings from main worktree'))
         }
         console.log()
         console.log(chalk.cyan(`cd ${worktreePath}`))

@@ -54,11 +54,10 @@ export function newCommand() {
 
         // Create the worktree
         await createWorktree(branchName, worktreePath, base)
+        spinner.stop()
+        console.log(chalk.green(`✓ Created worktree for branch '${branchName}'`))
 
-        // Copy .env file if it exists in main worktree
-        let envSymlinked = false
-        let settingsCopied = false
-        let ideaSettingsCopied = false
+        // Copy files from main worktree
         try {
           const { stdout: mainWorktreeRoot } = await execa('git', [
             'rev-parse',
@@ -72,7 +71,7 @@ export function newCommand() {
 
           if (existsSync(sourceEnvPath)) {
             await symlink(sourceEnvPath, targetEnvPath)
-            envSymlinked = true
+            console.log(chalk.gray('  Symlinked .env from main worktree'))
           }
 
           // Copy .claude/settings.local.json file
@@ -82,7 +81,7 @@ export function newCommand() {
           if (existsSync(sourceSettingsPath)) {
             await mkdir(dirname(targetSettingsPath), { recursive: true })
             await copyFile(sourceSettingsPath, targetSettingsPath)
-            settingsCopied = true
+            console.log(chalk.gray('  Copied .claude/settings.local.json from main worktree'))
           }
 
           // Copy WebStorm .idea settings (whitelisted files only)
@@ -90,6 +89,8 @@ export function newCommand() {
           const targetIdeaPath = join(worktreePath, '.idea')
 
           if (existsSync(sourceIdeaPath)) {
+            let copiedAny = false
+
             // Ensure target .idea directory exists
             await mkdir(targetIdeaPath, { recursive: true })
 
@@ -100,7 +101,7 @@ export function newCommand() {
               const targetDir = join(targetIdeaPath, dir)
               if (existsSync(sourceDir) && statSync(sourceDir).isDirectory()) {
                 await cp(sourceDir, targetDir, { recursive: true })
-                ideaSettingsCopied = true
+                copiedAny = true
               }
             }
 
@@ -111,7 +112,7 @@ export function newCommand() {
               const targetFile = join(targetIdeaPath, file)
               if (existsSync(sourceFile)) {
                 await copyFile(sourceFile, targetFile)
-                ideaSettingsCopied = true
+                copiedAny = true
               }
             }
 
@@ -123,9 +124,13 @@ export function newCommand() {
                 const targetFile = join(targetIdeaPath, file)
                 if (existsSync(sourceFile)) {
                   await copyFile(sourceFile, targetFile)
-                  ideaSettingsCopied = true
+                  copiedAny = true
                 }
               }
+            }
+
+            if (copiedAny) {
+              console.log(chalk.gray('  Copied WebStorm settings from main worktree'))
             }
           }
         } catch (error) {
@@ -159,20 +164,7 @@ export function newCommand() {
           console.log(chalk.yellow(`⚠ Warning: Post-worktree hook failed: ${errorMessage}`))
         }
 
-        // Stop spinner before success message (if not already stopped)
-        spinner.stop()
-
-        // Success message
-        console.log(chalk.green(`✓ Created worktree for branch '${branchName}'`))
-        if (envSymlinked) {
-          console.log(chalk.gray('  Symlinked .env from main worktree'))
-        }
-        if (settingsCopied) {
-          console.log(chalk.gray('  Copied .claude/settings.local.json from main worktree'))
-        }
-        if (ideaSettingsCopied) {
-          console.log(chalk.gray('  Copied WebStorm settings from main worktree'))
-        }
+        // Print final cd command
         console.log()
         console.log(chalk.cyan(`cd ${worktreePath}`))
       } catch (error) {

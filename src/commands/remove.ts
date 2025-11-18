@@ -136,7 +136,7 @@ export function removeCommand() {
           spinner.text = 'Removing worktree...'
           spinner.start()
 
-          await removeWorktree(worktreePath)
+          await removeWorktree(worktreePath, options.force)
 
           spinner.stop()
           console.log(chalk.green(`✓ Removed worktree: ${worktreeDirname}`))

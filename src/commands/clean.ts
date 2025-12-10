@@ -5,9 +5,10 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
+import { checkbox } from '@inquirer/prompts'
 import { basename, dirname, join } from 'node:path'
-import { createInterface } from 'node:readline'
-import { readdirSync, statSync, existsSync, rmSync } from 'node:fs'
+import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs'
+import { execa } from 'execa'
 import {
   listWorktrees,
   getRepoName,
@@ -33,6 +34,12 @@ interface AbandonedFolder {
   dirname: string
   fileCount: number
   folderCount: number
+}
+
+interface OrphanWorktree {
+  path: string
+  dirname: string
+  brokenGitdir: string
 }
 
 /**
@@ -97,20 +104,52 @@ function findAbandonedFolders(worktreesDir: string): AbandonedFolder[] {
 }
 
 /**
- * Prompt user for yes/no confirmation
+ * Find orphan worktrees - folders with .git file pointing to non-existent gitdir
  */
-async function confirm(message: string): Promise<boolean> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  })
+function findOrphanWorktrees(worktreesDir: string): OrphanWorktree[] {
+  const orphans: OrphanWorktree[] = []
 
-  return new Promise((resolve) => {
-    rl.question(`${message} (y/N): `, (answer) => {
-      rl.close()
-      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes')
-    })
-  })
+  if (!existsSync(worktreesDir)) {
+    return orphans
+  }
+
+  try {
+    const entries = readdirSync(worktreesDir)
+    for (const entry of entries) {
+      const fullPath = join(worktreesDir, entry)
+      const stat = statSync(fullPath)
+
+      if (stat.isDirectory()) {
+        const gitPath = join(fullPath, '.git')
+        if (existsSync(gitPath)) {
+          const gitStat = statSync(gitPath)
+          // Only check .git files (not directories - those are regular repos)
+          if (gitStat.isFile()) {
+            try {
+              const content = readFileSync(gitPath, 'utf-8')
+              const match = content.match(/^gitdir:\s*(.+)$/m)
+              if (match) {
+                const gitdir = match[1].trim()
+                if (!existsSync(gitdir)) {
+                  orphans.push({
+                    path: fullPath,
+                    dirname: entry,
+                    brokenGitdir: gitdir,
+                  })
+                }
+              }
+            } catch {
+              // If we can't read the .git file, skip it
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // If we can't read the worktrees directory, return empty array
+  }
+
+  return orphans
 }
 
 export function cleanCommand() {
@@ -216,167 +255,174 @@ export function cleanCommand() {
           const skipped = cleanable.filter((w) => w.hasUncommittedChanges)
           const toRemove = cleanable.filter((w) => !w.hasUncommittedChanges)
 
-          // Find abandoned folders
+          // Find abandoned folders and orphan worktrees
           spinner.text = 'Scanning for abandoned folders...'
           const abandonedFolders = findAbandonedFolders(worktreesDir)
+          const orphanWorktrees = findOrphanWorktrees(worktreesDir)
 
           // Stop spinner before displaying results
           spinner.stop()
 
-          if (cleanable.length === 0 && abandonedFolders.length === 0) {
-            console.log(chalk.green('✓ No merged/closed worktrees or abandoned folders found'))
+          if (cleanable.length === 0 && abandonedFolders.length === 0 && orphanWorktrees.length === 0) {
+            console.log(chalk.green('✓ No merged/closed worktrees, abandoned folders, or orphan worktrees found'))
             return
           }
 
-          // Show what will be removed
-          if (toRemove.length > 0) {
-            console.log(chalk.bold('Cleanable worktrees:'))
-            console.log()
+          // Build checkbox choices
+          type ChoiceValue =
+            | { type: 'worktree'; data: CleanableWorktree }
+            | { type: 'abandoned'; data: AbandonedFolder }
+            | { type: 'orphan'; data: OrphanWorktree }
+          const choices: { name: string; value: ChoiceValue; checked: boolean }[] = []
 
-            for (const wt of toRemove) {
-              const stateColor = wt.prState === 'merged' ? chalk.magenta : chalk.magenta
-              console.log(`${stateColor(wt.dirname)} (${wt.prState.toUpperCase()})`)
-              console.log(`  Branch: ${wt.branch}`)
-              console.log()
-            }
+          for (const wt of toRemove) {
+            const stateLabel = wt.prState === 'merged' ? chalk.green('MERGED') : chalk.yellow('CLOSED')
+            choices.push({
+              name: `${wt.dirname} (${stateLabel})`,
+              value: { type: 'worktree', data: wt },
+              checked: false,
+            })
+          }
+
+          for (const folder of abandonedFolders) {
+            choices.push({
+              name: `${folder.dirname} ${chalk.gray('(abandoned)')}`,
+              value: { type: 'abandoned', data: folder },
+              checked: false,
+            })
+          }
+
+          for (const orphan of orphanWorktrees) {
+            choices.push({
+              name: `${orphan.dirname} ${chalk.hex('#FFA500')('(orphan)')}`,
+              value: { type: 'orphan', data: orphan },
+              checked: false,
+            })
           }
 
           // Show skipped worktrees
           if (skipped.length > 0) {
             console.log(chalk.yellow('⚠ Skipped (uncommitted changes):'))
-            console.log()
             for (const wt of skipped) {
-              console.log(`${chalk.yellow(wt.dirname)} (${wt.prState.toUpperCase()})`)
-              console.log(`  Branch: ${wt.branch}`)
-              console.log()
+              console.log(`  ${wt.dirname} (${wt.branch})`)
             }
-          }
-
-          // Show abandoned folders
-          if (abandonedFolders.length > 0) {
-            console.log(chalk.bold('Abandoned folders (no .git):'))
             console.log()
-            for (const folder of abandonedFolders) {
-              console.log(chalk.cyan(folder.dirname))
-              console.log(chalk.gray(`  Contents: ${folder.fileCount} files, ${folder.folderCount} folders`))
-              console.log()
-            }
           }
 
-          if (toRemove.length === 0 && abandonedFolders.length === 0) {
+          if (choices.length === 0) {
             console.log(chalk.yellow('No worktrees can be removed (all have uncommitted changes)'))
             return
           }
 
           // Dry run mode
           if (options.dryRun) {
-            console.log('━'.repeat(60))
-            if (toRemove.length > 0 && abandonedFolders.length > 0) {
-              console.log(chalk.blue(`[DRY RUN] Would remove ${toRemove.length} worktree(s) and ${abandonedFolders.length} abandoned folder(s)`))
-            } else if (toRemove.length > 0) {
-              console.log(chalk.blue(`[DRY RUN] Would remove ${toRemove.length} worktree(s)`))
-            } else {
-              console.log(chalk.blue(`[DRY RUN] Would remove ${abandonedFolders.length} abandoned folder(s)`))
+            console.log(chalk.bold('Would remove:'))
+            for (const choice of choices) {
+              console.log(`  ${choice.name}`)
             }
             return
           }
 
-          // Confirm with user
-          if (!options.force) {
-            console.log('━'.repeat(60))
-            let confirmMessage = ''
-            if (toRemove.length > 0 && abandonedFolders.length > 0) {
-              confirmMessage = `Remove ${toRemove.length} worktree(s) and ${abandonedFolders.length} abandoned folder(s)?`
-            } else if (toRemove.length > 0) {
-              confirmMessage = `Remove ${toRemove.length} worktree(s)?`
-            } else {
-              confirmMessage = `Remove ${abandonedFolders.length} abandoned folder(s)?`
-            }
-            const confirmed = await confirm(chalk.bold(confirmMessage))
-            if (!confirmed) {
-              console.log(chalk.yellow('Cancelled'))
-              return
-            }
-            console.log()
+          // Interactive selection (skip if --force)
+          let selectedItems: ChoiceValue[]
+          if (options.force) {
+            selectedItems = choices.map(c => c.value)
+          } else {
+            selectedItems = await checkbox({
+              message: 'Select worktrees to remove:',
+              choices,
+            })
           }
 
-          // Remove worktrees
+          if (selectedItems.length === 0) {
+            console.log(chalk.yellow('No worktrees selected'))
+            return
+          }
+
+          console.log()
+
+          // Remove selected items
           let removed = 0
           let failed = 0
           let abandonedRemoved = 0
           let abandonedFailed = 0
+          let orphanRemoved = 0
+          let orphanFailed = 0
 
-          for (const wt of toRemove) {
-            try {
-              // Remove worktree
-              await removeWorktree(wt.path)
-              console.log(chalk.green(`✓ Removed worktree: ${wt.dirname}`))
+          const removeSpinner = ora()
 
-              // Ask about deleting branch
-              const deleteBranchConfirmed = await confirm(
-                chalk.gray(`  Delete branch '${wt.branch}'?`),
-              )
-              if (deleteBranchConfirmed) {
+          for (const item of selectedItems) {
+            if (item.type === 'worktree') {
+              const wt = item.data
+              removeSpinner.start(`Removing ${wt.dirname}...`)
+              try {
+                await removeWorktree(wt.path)
                 try {
                   await deleteBranch(wt.branch, true)
-                  console.log(chalk.green(`  ✓ Deleted branch: ${wt.branch}`))
-                } catch (error) {
-                  console.log(
-                    chalk.yellow(`  ⚠ Could not delete branch: ${wt.branch}`),
-                  )
+                  removeSpinner.succeed(`Removed: ${wt.dirname} (branch deleted)`)
+                } catch {
+                  removeSpinner.succeed(`Removed: ${wt.dirname}` + chalk.yellow(` (branch kept)`))
                 }
-              } else {
-                console.log(chalk.gray(`  Branch '${wt.branch}' kept`))
+                removed++
+              } catch (error) {
+                removeSpinner.fail(`Failed to remove: ${wt.dirname}`)
+                if (error instanceof Error) {
+                  console.log(chalk.red(`  ${error.message}`))
+                }
+                failed++
               }
-
-              console.log()
-              removed++
-            } catch (error) {
-              console.log(chalk.red(`✗ Failed to remove: ${wt.dirname}`))
-              if (error instanceof Error) {
-                console.log(chalk.red(`  ${error.message}`))
+            } else if (item.type === 'abandoned') {
+              const folder = item.data
+              removeSpinner.start(`Removing ${folder.dirname}...`)
+              try {
+                await execa('rm', ['-rf', folder.path])
+                removeSpinner.succeed(`Removed: ${folder.dirname}`)
+                abandonedRemoved++
+              } catch (error) {
+                removeSpinner.fail(`Failed to remove: ${folder.dirname}`)
+                if (error instanceof Error) {
+                  console.log(chalk.red(`  ${error.message}`))
+                }
+                abandonedFailed++
               }
-              console.log()
-              failed++
-            }
-          }
-
-          // Remove abandoned folders
-          for (const folder of abandonedFolders) {
-            try {
-              rmSync(folder.path, { recursive: true, force: true })
-              console.log(chalk.green(`✓ Removed abandoned folder: ${folder.dirname}`))
-              console.log()
-              abandonedRemoved++
-            } catch (error) {
-              console.log(chalk.red(`✗ Failed to remove: ${folder.dirname}`))
-              if (error instanceof Error) {
-                console.log(chalk.red(`  ${error.message}`))
+            } else {
+              const orphan = item.data
+              removeSpinner.start(`Removing ${orphan.dirname}...`)
+              try {
+                await execa('rm', ['-rf', orphan.path])
+                removeSpinner.succeed(`Removed: ${orphan.dirname}`)
+                orphanRemoved++
+              } catch (error) {
+                removeSpinner.fail(`Failed to remove: ${orphan.dirname}`)
+                if (error instanceof Error) {
+                  console.log(chalk.red(`  ${error.message}`))
+                }
+                orphanFailed++
               }
-              console.log()
-              abandonedFailed++
             }
           }
 
           // Summary
           console.log('━'.repeat(60))
 
-          const totalRemoved = removed + abandonedRemoved
+          const foldersRemoved = abandonedRemoved + orphanRemoved
+          const foldersFailed = abandonedFailed + orphanFailed
+          const totalRemoved = removed + foldersRemoved
 
-          if (removed > 0 && abandonedRemoved > 0) {
-            console.log(chalk.green(`✓ Cleaned up ${removed} worktree(s) and ${abandonedRemoved} abandoned folder(s)!`))
+          if (removed > 0 && foldersRemoved > 0) {
+            console.log(chalk.green(`✓ Cleaned up ${removed} worktree(s) and ${foldersRemoved} folder(s)!`))
           } else if (removed > 0) {
             console.log(chalk.green(`✓ Cleaned up ${removed} worktree(s)!`))
-          } else if (abandonedRemoved > 0) {
-            console.log(chalk.green(`✓ Cleaned up ${abandonedRemoved} abandoned folder(s)!`))
+          } else if (foldersRemoved > 0) {
+            console.log(chalk.green(`✓ Cleaned up ${foldersRemoved} folder(s)!`))
           }
 
-          if (failed > 0 && abandonedFailed > 0) {
-            console.log(chalk.red(`✗ Failed to remove ${failed} worktree(s) and ${abandonedFailed} abandoned folder(s)`))
+          if (failed > 0 && foldersFailed > 0) {
+            console.log(chalk.red(`✗ Failed to remove ${failed} worktree(s) and ${foldersFailed} folder(s)`))
           } else if (failed > 0) {
             console.log(chalk.red(`✗ Failed to remove ${failed} worktree(s)`))
-          } else if (abandonedFailed > 0) {
-            console.log(chalk.red(`✗ Failed to remove ${abandonedFailed} abandoned folder(s)`))
+          } else if (foldersFailed > 0) {
+            console.log(chalk.red(`✗ Failed to remove ${foldersFailed} folder(s)`))
           }
 
           if (totalRemoved > 0) {

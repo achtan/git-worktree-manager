@@ -356,7 +356,7 @@ export function cleanCommand() {
               const wt = item.data
               removeSpinner.start(`Removing ${wt.dirname}...`)
               try {
-                await removeWorktree(wt.path)
+                await removeWorktree(wt.path, true)
                 try {
                   await deleteBranch(wt.branch, true)
                   removeSpinner.succeed(`Removed: ${wt.dirname} (branch deleted)`)

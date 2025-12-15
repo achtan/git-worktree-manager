@@ -7,10 +7,13 @@ A command-line tool for managing Git worktrees efficiently with GitHub integrati
 - **Quick Worktree Creation** - Create new worktrees with a simple command
 - **Status Overview** - List all worktrees with PR status, checks, and branch info
 - **Smart Cleanup** - Automatically remove worktrees for merged/closed PRs
+- **Abandoned Folder Detection** - Find and remove leftover directories without `.git`
+- **Orphan Worktree Detection** - Find and remove worktrees with broken gitdir references
 - **GitHub Integration** - Real-time PR status (open/draft/merged/closed)
 - **Visual Feedback** - Loading spinners for long-running operations
-- **Interactive Prompts** - Confirms before destructive operations
+- **Interactive Prompts** - Checkbox selection for cleanup, confirms before destructive operations
 - **Uncommitted Changes Detection** - Prevents accidental data loss
+- **IDE Settings Sync** - Copies WebStorm `.idea` settings to new worktrees
 
 ## Requirements
 
@@ -62,6 +65,7 @@ wt new feature/new-feature develop
 - Fails if branch already exists locally
 - Symlinks `.env` file from main worktree if present
 - Copies `.claude/settings.local.json` from main worktree if present
+- Copies WebStorm `.idea` settings from main worktree (run configurations, code styles, inspection profiles, scopes, and project files)
 
 ### `wt list`
 
@@ -107,52 +111,111 @@ Summary: 2 worktrees (1 open, 1 merged)
 
 ### `wt clean`
 
-Remove worktrees for branches with merged or closed PRs. Interactive with confirmation prompts.
+Remove worktrees for branches with merged or closed PRs, abandoned folders, and orphan worktrees. Uses interactive checkbox selection.
 
 ```bash
-# Clean up merged/closed worktrees (with confirmation)
+# Clean up merged/closed worktrees (interactive)
 wt clean
 
 # Dry run to see what would be removed
 wt clean --dry-run
 
-# Skip confirmation prompt
+# Skip interactive selection (select all)
 wt clean --force
 ```
 
 **Options:**
 - `-d, --dry-run` - Show what would be removed without actually removing
-- `-f, --force` - Skip confirmation prompt (still asks per branch deletion)
+- `-f, --force` - Skip interactive selection (removes all cleanable items)
+
+**What it detects:**
+- **Merged/Closed worktrees** - Worktrees with merged or closed PRs
+- **Abandoned folders** - Directories in worktrees folder without `.git` (leftover from manual deletions)
+- **Orphan worktrees** - Directories with `.git` file pointing to non-existent gitdir
 
 **Safety features:**
 - Shows spinner while checking PR status
 - Automatically skips worktrees with uncommitted changes (warns user)
 - Skips the current worktree
-- Requires confirmation before removing
-- Asks whether to delete local branch for each removed worktree
+- Interactive checkbox selection to choose what to remove
+- Automatically deletes local branch when removing worktree
 - Only processes worktrees in `<repo>-worktrees/` directory
 
 **Example flow:**
 ```
 Scanning worktrees...
 Checking PR status...
-
-Cleanable worktrees:
-
-feature-old (MERGED)
-  Branch: feature/old
+Scanning for abandoned folders...
 
 ⚠ Skipped (uncommitted changes):
+  bugfix-draft (bugfix/draft)
 
-bugfix-draft (CLOSED)
-  Branch: bugfix/draft
+? Select worktrees to remove:
+❯ ◯ feature-old (MERGED)
+  ◯ bugfix-done (CLOSED)
+  ◯ leftover-dir (abandoned)
+  ◯ broken-wt (orphan)
+
+Removing feature-old...
+✓ Removed: feature-old (branch deleted)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Remove 1 worktree(s)? (y/N): y
+✓ Cleaned up 1 worktree(s)!
+Run 'wt list' to see remaining worktrees.
+```
 
-✓ Removed worktree: feature-old
-  Delete branch 'feature/old'? (y/N): y
-  ✓ Deleted branch: feature/old
+### `wt remove <name>`
+
+Remove a specific worktree by name. Interactive with safety prompts for uncommitted changes and unpushed commits.
+
+```bash
+# Remove by branch name
+wt remove feature/my-feature
+
+# Remove by directory name
+wt remove feature-my-feature
+
+# Keep the local branch (only remove worktree)
+wt remove feature/my-feature --keep-branch
+
+# Force removal (skip all prompts)
+wt remove feature/my-feature --force
+```
+
+**Arguments:**
+- `<name>` - Worktree name (matches branch name or directory name)
+
+**Options:**
+- `--keep-branch` - Keep the local branch after removing the worktree
+- `-f, --force` - Force removal even with uncommitted changes or unpushed commits
+
+**Safety features:**
+- Shows uncommitted changes before removal
+- Option to view diff before discarding changes
+- Warns about unpushed commits before branch deletion
+- Warns about branches with no remote tracking
+- Interactive prompts to abort, keep branch, or proceed
+
+**Example flow:**
+```
+Worktree: feature-my-feature
+  Path: /path/to/repo-worktrees/feature-my-feature
+  Branch: feature/my-feature
+
+⚠ Uncommitted changes detected:
+
+Modified:
+  src/file.ts
+
+? What would you like to do?
+❯ Show diff
+  Discard changes and remove
+  Abort
+
+✓ Removed worktree: feature-my-feature
+✓ Deleted branch: feature/my-feature
+
+Run 'wt list' to see remaining worktrees
 ```
 
 ## GitHub Integration
@@ -209,7 +272,7 @@ wt list
 
 # After PR is merged, clean up
 wt clean
-# Removes merged worktree and optionally deletes branch
+# Removes merged worktree and deletes branch
 ```
 
 ## Development
@@ -242,7 +305,8 @@ git-worktree-manager/
 │   ├── commands/     # CLI command implementations
 │   │   ├── new.ts    # Create worktree command
 │   │   ├── list.ts   # List worktrees command
-│   │   └── clean.ts  # Clean worktrees command
+│   │   ├── clean.ts  # Clean worktrees command
+│   │   └── remove.ts # Remove specific worktree command
 │   └── utils/        # Utility functions
 │       ├── git.ts    # Git operations
 │       └── github.ts # GitHub API helpers

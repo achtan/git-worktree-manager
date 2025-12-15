@@ -5,6 +5,7 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
+import { select } from '@inquirer/prompts'
 import { basename, dirname, join } from 'node:path'
 import {
   listWorktrees,
@@ -13,6 +14,10 @@ import {
   removeWorktree,
   deleteBranch,
   hasUnpushedCommits,
+  getWorktreeChanges,
+  getGitDiff,
+  forceRemoveDirectory,
+  pruneWorktrees,
 } from '../utils/git.js'
 
 export function removeCommand() {
@@ -74,13 +79,6 @@ export function removeCommand() {
           spinner.text = 'Checking for uncommitted changes...'
           const uncommitted = await hasUncommittedChanges(worktreePath)
 
-          if (uncommitted && !options.force) {
-            spinner.stop()
-            console.error(chalk.red(`Error: Worktree '${worktreeDirname}' has uncommitted changes`))
-            console.log(chalk.yellow('Use --force to remove anyway'))
-            process.exit(1)
-          }
-
           // Check for unpushed commits (only if we're going to delete the branch)
           let hasUnpushed = false
           let noRemote = false
@@ -89,54 +87,139 @@ export function removeCommand() {
             const pushStatus = await hasUnpushedCommits(branch)
             hasUnpushed = pushStatus.hasUnpushed
             noRemote = pushStatus.noRemote
-
-            if ((hasUnpushed || noRemote) && !options.force) {
-              spinner.stop()
-              if (hasUnpushed) {
-                console.error(
-                  chalk.red(`Error: Branch '${branch}' has unpushed commits`),
-                )
-              } else {
-                console.error(
-                  chalk.red(`Error: Branch '${branch}' has no remote tracking branch`),
-                )
-              }
-              console.log(chalk.yellow('Use --force to delete anyway, or --keep-branch to preserve the branch'))
-              process.exit(1)
-            }
           }
 
           spinner.stop()
 
-          // Show warnings if forcing
-          if (options.force) {
-            if (uncommitted) {
-              console.log(
-                chalk.yellow(`⚠ Warning: Removing worktree with uncommitted changes`),
-              )
-            }
-            if (hasUnpushed && !options.keepBranch) {
-              console.log(
-                chalk.yellow(`⚠ Warning: Deleting branch with unpushed commits`),
-              )
-            }
-            if (noRemote && !options.keepBranch) {
-              console.log(
-                chalk.yellow(`⚠ Warning: Deleting branch with no remote tracking`),
-              )
-            }
-          }
-
-          // Remove worktree
-          console.log(chalk.bold(`Removing worktree: ${worktreeDirname}`))
+          // Display worktree info
+          console.log(chalk.bold(`Worktree: ${worktreeDirname}`))
           console.log(chalk.gray(`  Path: ${worktreePath}`))
           console.log(chalk.gray(`  Branch: ${branch}`))
           console.log()
 
+          // Handle uncommitted changes interactively (unless --force)
+          if (uncommitted && !options.force) {
+            const changes = await getWorktreeChanges(worktreePath)
+
+            console.log(chalk.yellow('⚠ Uncommitted changes detected:'))
+            console.log()
+
+            if (changes.modified.length > 0) {
+              console.log(chalk.bold('Modified:'))
+              for (const line of changes.modified) {
+                console.log(`  ${line}`)
+              }
+              console.log()
+            }
+
+            if (changes.untracked.length > 0) {
+              console.log(chalk.bold('Untracked:'))
+              for (const line of changes.untracked) {
+                console.log(`  ${line}`)
+              }
+              console.log()
+            }
+
+            // Interactive prompt
+            let showedDiff = false
+            let shouldRemove = false
+
+            while (!shouldRemove) {
+              const choices = showedDiff
+                ? [
+                    { name: 'Discard changes and remove', value: 'remove' as const },
+                    { name: 'Abort', value: 'abort' as const },
+                  ]
+                : [
+                    { name: 'Show diff', value: 'diff' as const },
+                    { name: 'Discard changes and remove', value: 'remove' as const },
+                    { name: 'Abort', value: 'abort' as const },
+                  ]
+
+              const action = await select({
+                message: 'What would you like to do?',
+                choices,
+              })
+
+              if (action === 'abort') {
+                console.log(chalk.yellow('Aborted.'))
+                return
+              }
+
+              if (action === 'diff') {
+                const diff = await getGitDiff(worktreePath)
+                console.log()
+                console.log('─'.repeat(60))
+                if (diff) {
+                  console.log(diff)
+                } else {
+                  console.log(chalk.gray('No diff available (only untracked files)'))
+                }
+                console.log('─'.repeat(60))
+                console.log()
+                showedDiff = true
+                continue
+              }
+
+              if (action === 'remove') {
+                shouldRemove = true
+              }
+            }
+          }
+
+          // Show warnings for unpushed commits (unless --force)
+          if ((hasUnpushed || noRemote) && !options.keepBranch && !options.force) {
+            if (hasUnpushed) {
+              console.log(chalk.yellow(`⚠ Warning: Branch '${branch}' has unpushed commits`))
+            } else {
+              console.log(chalk.yellow(`⚠ Warning: Branch '${branch}' has no remote tracking branch`))
+            }
+
+            const action = await select({
+              message: 'What would you like to do?',
+              choices: [
+                { name: 'Delete branch anyway', value: 'delete' as const },
+                { name: 'Keep branch (only remove worktree)', value: 'keep' as const },
+                { name: 'Abort', value: 'abort' as const },
+              ],
+            })
+
+            if (action === 'abort') {
+              console.log(chalk.yellow('Aborted.'))
+              return
+            }
+
+            if (action === 'keep') {
+              options.keepBranch = true
+            }
+          }
+
+          // Show warnings if forcing
+          if (options.force) {
+            if (uncommitted) {
+              console.log(chalk.yellow(`⚠ Warning: Removing worktree with uncommitted changes`))
+            }
+            if (hasUnpushed && !options.keepBranch) {
+              console.log(chalk.yellow(`⚠ Warning: Deleting branch with unpushed commits`))
+            }
+            if (noRemote && !options.keepBranch) {
+              console.log(chalk.yellow(`⚠ Warning: Deleting branch with no remote tracking`))
+            }
+          }
+
+          // Remove worktree
+          console.log()
           spinner.text = 'Removing worktree...'
           spinner.start()
 
-          await removeWorktree(worktreePath, options.force)
+          try {
+            await removeWorktree(worktreePath, true)
+          } catch {
+            // Fallback to force remove if git worktree remove fails (e.g., untracked files)
+            spinner.text = 'Force removing directory...'
+            await forceRemoveDirectory(worktreePath)
+            await pruneWorktrees()
+          }
 
           spinner.stop()
           console.log(chalk.green(`✓ Removed worktree: ${worktreeDirname}`))

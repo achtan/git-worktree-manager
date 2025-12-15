@@ -236,6 +236,67 @@ export function isPathInWorktree(currentPath: string, worktreePath: string): boo
 }
 
 /**
+ * Get worktree changes (modified and untracked files)
+ */
+export async function getWorktreeChanges(
+  path: string,
+): Promise<{ modified: string[]; untracked: string[] }> {
+  try {
+    const { stdout } = await execa('git', ['-C', path, 'status', '--porcelain'])
+    const lines = stdout.trim().split('\n').filter(Boolean)
+
+    const modified: string[] = []
+    const untracked: string[] = []
+
+    for (const line of lines) {
+      if (line.startsWith('??')) {
+        untracked.push(line)
+      } else {
+        modified.push(line)
+      }
+    }
+
+    return { modified, untracked }
+  } catch {
+    return { modified: [], untracked: [] }
+  }
+}
+
+/**
+ * Get git diff with color output
+ */
+export async function getGitDiff(path: string): Promise<string> {
+  try {
+    // Get staged + unstaged diff
+    const { stdout: unstagedDiff } = await execa('git', ['-C', path, 'diff', '--color'])
+    const { stdout: stagedDiff } = await execa('git', ['-C', path, 'diff', '--cached', '--color'])
+
+    const parts: string[] = []
+    if (stagedDiff.trim()) parts.push(stagedDiff)
+    if (unstagedDiff.trim()) parts.push(unstagedDiff)
+
+    return parts.join('\n')
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Force remove a directory
+ */
+export async function forceRemoveDirectory(path: string): Promise<void> {
+  const { rm } = await import('node:fs/promises')
+  await rm(path, { recursive: true, force: true })
+}
+
+/**
+ * Prune stale worktree entries
+ */
+export async function pruneWorktrees(): Promise<void> {
+  await execa('git', ['worktree', 'prune'])
+}
+
+/**
  * Check if branch has unpushed commits
  * Returns { hasUnpushed: boolean, noRemote: boolean }
  */

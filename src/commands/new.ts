@@ -5,12 +5,12 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
-import { join, dirname } from 'node:path'
+import { join, dirname, basename } from 'node:path'
 import { symlink, copyFile, mkdir, readFile, cp, readdir } from 'node:fs/promises'
 import { existsSync, statSync } from 'node:fs'
 import { execa } from 'execa'
 import {
-  getRepoName,
+  getMainWorktreePath,
   getDefaultBranch,
   branchExists,
   ensureDir,
@@ -36,11 +36,12 @@ export function newCommand() {
         // Start spinner after validation passes
         spinner.start('Creating worktree...')
 
-        // Get repo name
-        const repoName = await getRepoName()
+        // Get main worktree path and derive repo name
+        const mainWorktreePath = await getMainWorktreePath()
+        const repoName = basename(mainWorktreePath)
 
-        // Construct worktree directory path
-        const worktreeBaseDir = join('..', `${repoName}-worktrees`)
+        // Construct worktree directory path (absolute, based on main worktree)
+        const worktreeBaseDir = join(dirname(mainWorktreePath), `${repoName}-worktrees`)
 
         // Convert branch name slashes to dashes for directory name
         const dirName = branchName.replace(/\//g, '-')
@@ -59,11 +60,7 @@ export function newCommand() {
 
         // Copy files from main worktree
         try {
-          const { stdout: mainWorktreeRoot } = await execa('git', [
-            'rev-parse',
-            '--show-toplevel',
-          ])
-          const mainRoot = mainWorktreeRoot.trim()
+          const mainRoot = mainWorktreePath
 
           // Symlink .env file
           const sourceEnvPath = join(mainRoot, '.env')

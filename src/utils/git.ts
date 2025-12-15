@@ -21,14 +21,21 @@ export interface Worktree {
 }
 
 /**
+ * Get main worktree path (first worktree is always the main one)
+ * Works correctly even when called from within a worktree
+ */
+export async function getMainWorktreePath(): Promise<string> {
+  const { stdout } = await execa('git', ['worktree', 'list'])
+  const firstLine = stdout.split('\n')[0]
+  return firstLine.split(/\s+/)[0]
+}
+
+/**
  * Get repository name from main worktree
  * Works correctly even when called from within a worktree
  */
 export async function getRepoName(): Promise<string> {
-  // Get all worktrees - first one is always the main worktree
-  const { stdout } = await execa('git', ['worktree', 'list'])
-  const firstLine = stdout.split('\n')[0]
-  const mainWorktreePath = firstLine.split(/\s+/)[0]
+  const mainWorktreePath = await getMainWorktreePath()
   return basename(mainWorktreePath)
 }
 

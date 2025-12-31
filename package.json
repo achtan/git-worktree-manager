@@ -1,5 +1,5 @@
 {
-  "name": "git-worktree-manager",
+  "name": "wt-manager",
   "version": "1.4.0",
   "description": "CLI tool for managing Git worktrees efficiently with GitHub integration",
   "type": "module",
@@ -8,6 +8,19 @@
   "bin": {
     "wt": "./dist/cli.js"
   },
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daviddurika/git-worktree-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/daviddurika/git-worktree-manager/issues"
+  },
+  "homepage": "https://github.com/daviddurika/git-worktree-manager#readme",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

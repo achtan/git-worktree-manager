@@ -66,6 +66,7 @@ wt new feature/new-feature develop
 - Symlinks `.env` file from main worktree if present
 - Copies `.claude/settings.local.json` from main worktree if present
 - Copies WebStorm `.idea` settings from main worktree (run configurations, code styles, inspection profiles, scopes, and project files)
+- Copies worktree path to clipboard for easy navigation
 
 ### `wt list`
 
@@ -216,6 +217,26 @@ Modified:
 ✓ Deleted branch: feature/my-feature
 
 Run 'wt list' to see remaining worktrees
+```
+
+### `wt init`
+
+Output shell function for `~/.zshrc` integration. Creates a `wtl` command that automates the full workflow.
+
+```bash
+# Add to ~/.zshrc:
+eval "$(wt init)"
+```
+
+**The `wtl` function:**
+1. Creates a new worktree (`wt new`)
+2. Changes to the worktree directory
+3. Opens WebStorm
+4. Starts Claude
+
+```bash
+# Usage:
+wtl feature/my-feature
 ```
 
 ## GitHub Integration

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "Bash(node:*)",
+      "Bash(cat:*)",
+      "Bash(npm run lint:*)",
+      "Bash(git push:*)",
+      "Bash(npm view:*)",
+      "WebFetch(domain:www.npmjs.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,62 +1,61 @@
 # Git Worktree Manager
 
-A command-line tool for managing Git worktrees efficiently with GitHub integration. Work with multiple Git branches simultaneously without switching contexts.
+The dashboard Git forgot to include.
 
-## Features
+## The Problem
 
-- **Quick Worktree Creation** - Create new worktrees with a simple command
-- **Status Overview** - List all worktrees with PR status, checks, and branch info
-- **Smart Cleanup** - Automatically remove worktrees for merged/closed PRs
-- **Abandoned Folder Detection** - Find and remove leftover directories without `.git`
-- **Orphan Worktree Detection** - Find and remove worktrees with broken gitdir references
-- **GitHub Integration** - Real-time PR status (open/draft/merged/closed)
-- **Visual Feedback** - Loading spinners for long-running operations
-- **Interactive Prompts** - Checkbox selection for cleanup, confirms before destructive operations
-- **Uncommitted Changes Detection** - Prevents accidental data loss
-- **IDE Settings Sync** - Copies WebStorm `.idea` settings to new worktrees
+Git worktrees let you work on multiple branches simultaneously—but managing them? That's where the fun ends.
 
-## Requirements
+- **"Which folder was that again?"** - You have 5 worktree directories and zero memory of which one has `feature/auth`
+- **The GitHub tab dance** - Constantly switching to check if that PR got merged yet, or if it's still sitting in review purgatory
+- **Stale worktree graveyard** - Merged PRs pile up as forgotten worktrees, each one silently judging your organizational skills
+- **Three tools, zero coordination** - Git knows your worktrees. GitHub knows your PRs. Your filesystem knows your folders. They don't talk to each other.
 
-- Node.js 22+
-- Git
-- GitHub CLI (`gh`) authenticated (for GitHub features)
+## The Solution
 
-## Installation
-
-### Global Installation
-
-```bash
-npm install -g .
-```
-
-### Development
-
-```bash
-npm install
-npm run build
-```
-
-## Usage
-
-### Create a new worktree
-
-Creates a new worktree and copies the path to clipboard. Use when starting work on a new branch.
-
-```bash
-wt feature/my-feature
-# use `wtl` to cd into worktree, open IDE and start Claude
-wtl feature/my-feature
-```
-
-### List all worktrees
-
-```bash
-wt list
-```
-
-Shows all worktrees with PR status, ahead/behind counts, and CI status.
+`wt` gives you the dashboard Git forgot to include.
 
 ![wt list output](./wt-list.png)
+
+One command shows you everything:
+- All your worktrees with their PR status (open/draft/merged/closed)
+- Which branches are ahead/behind
+- CI check status (passing/failing)
+- Uncommitted changes warnings
+
+And when you're done? `wt clean` finds all merged/closed PRs and removes their worktrees and branches in one go. It even asks nicely before deleting anything.
+
+## Quick Start
+
+**Requirements:** Node.js 22+, Git, and [GitHub CLI](https://cli.github.com/) (`gh auth login`)
+
+```bash
+# Install globally
+npm install -g .
+
+# Create a new worktree
+wt feature/my-feature
+
+# See all worktrees with PR status
+wt list
+
+# Clean up merged/closed worktrees
+wt clean
+```
+
+### Shell Integration
+
+For the full workflow (create worktree → cd into it → open IDE → start Claude):
+
+```bash
+# Add to ~/.zshrc
+eval "$(wt init)"
+
+# To initialize a new worktree and branch call
+wt feature/my-feature
+# To navigate to it, open WebStorm, and start Claude, run:
+wtl ../repo-worktrees/feature-my-feature
+```
 
 ## Commands
 

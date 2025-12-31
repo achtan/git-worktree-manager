@@ -15,7 +15,9 @@ import {
   branchExists,
   ensureDir,
   createWorktree,
+  fetchOrigin,
 } from '../utils/git.js'
+import { copyToClipboard } from '../utils/clipboard.js'
 
 export function newCommand() {
   const cmd = new Command('new')
@@ -50,11 +52,24 @@ export function newCommand() {
         // Get base branch (use provided or auto-detect)
         const base = baseBranch || (await getDefaultBranch())
 
+        // Fetch latest from origin
+        let useRemoteBase = true
+        try {
+          spinner.text = 'Fetching latest from origin...'
+          await fetchOrigin()
+        } catch {
+          spinner.stop()
+          console.log(chalk.yellow(`⚠ Warning: Could not fetch from origin, using local '${base}'`))
+          spinner.start('Creating worktree...')
+          useRemoteBase = false
+        }
+
         // Ensure worktrees directory exists
         await ensureDir(worktreeBaseDir)
 
-        // Create the worktree
-        await createWorktree(branchName, worktreePath, base)
+        // Create the worktree (use origin/<base> if fetch succeeded)
+        const actualBase = useRemoteBase ? `origin/${base}` : base
+        await createWorktree(branchName, worktreePath, actualBase)
         spinner.stop()
         console.log(chalk.green(`✓ Created worktree for branch '${branchName}'`))
 
@@ -161,9 +176,14 @@ export function newCommand() {
           console.log(chalk.yellow(`⚠ Warning: Post-worktree hook failed: ${errorMessage}`))
         }
 
-        // Print final cd command
+        // Print final cd command and copy path to clipboard
         console.log()
-        console.log(chalk.cyan(`cd ${worktreePath}`))
+        const copied = await copyToClipboard(worktreePath)
+        if (copied) {
+          console.log(chalk.cyan(`cd ${worktreePath}`), chalk.gray('(path copied to clipboard)'))
+        } else {
+          console.log(chalk.cyan(`cd ${worktreePath}`))
+        }
       } catch (error) {
         spinner.stop()
         if (error instanceof Error) {

@@ -53,6 +53,13 @@ export async function getDefaultBranch(): Promise<string> {
 }
 
 /**
+ * Fetch from origin
+ */
+export async function fetchOrigin(): Promise<void> {
+  await execa('git', ['fetch', 'origin'])
+}
+
+/**
  * Get list of all worktrees
  */
 export async function listWorktrees(): Promise<Worktree[]> {

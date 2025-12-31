@@ -17,6 +17,7 @@ import { newCommand } from './commands/new.js'
 import { listCommand } from './commands/list.js'
 import { cleanCommand } from './commands/clean.js'
 import { removeCommand } from './commands/remove.js'
+import { initCommand } from './commands/init.js'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../package.json') as { version: string }
@@ -33,10 +34,11 @@ program.addCommand(newCommand())
 program.addCommand(listCommand())
 program.addCommand(cleanCommand())
 program.addCommand(removeCommand())
+program.addCommand(initCommand())
 
 // Default action: if first arg doesn't match a subcommand, treat it as "new <branch>"
 const args = process.argv.slice(2)
-if (args.length > 0 && !['new', 'list', 'clean', 'remove', '-h', '--help', '-v', '--version'].includes(args[0])) {
+if (args.length > 0 && !['new', 'list', 'clean', 'remove', 'init', '-h', '--help', '-v', '--version'].includes(args[0])) {
   // Inject 'new' subcommand
   process.argv.splice(2, 0, 'new')
 }

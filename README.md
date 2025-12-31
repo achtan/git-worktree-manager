@@ -36,6 +36,28 @@ npm install
 npm run build
 ```
 
+## Usage
+
+### Create a new worktree
+
+Creates a new worktree and copies the path to clipboard. Use when starting work on a new branch.
+
+```bash
+wt feature/my-feature
+# use `wtl` to cd into worktree, open IDE and start Claude
+wtl feature/my-feature
+```
+
+### List all worktrees
+
+```bash
+wt list
+```
+
+Shows all worktrees with PR status, ahead/behind counts, and CI status.
+
+![wt list output](./wt-list.png)
+
 ## Commands
 
 ### `wt <branch-name> [base-branch]`
@@ -315,24 +337,6 @@ npm run dev
 ```bash
 npm run lint
 npm run format
-```
-
-## Project Structure
-
-```
-git-worktree-manager/
-├── src/
-│   ├── cli.ts        # Main CLI entry point
-│   ├── commands/     # CLI command implementations
-│   │   ├── new.ts    # Create worktree command
-│   │   ├── list.ts   # List worktrees command
-│   │   ├── clean.ts  # Clean worktrees command
-│   │   └── remove.ts # Remove specific worktree command
-│   └── utils/        # Utility functions
-│       ├── git.ts    # Git operations
-│       └── github.ts # GitHub API helpers
-├── dist/             # Compiled output
-└── package.json
 ```
 
 ## License

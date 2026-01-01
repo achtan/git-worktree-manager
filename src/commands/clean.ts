@@ -8,7 +8,6 @@ import { multiselect } from '@clack/prompts'
 import { createSpinner } from '../utils/spinner.js'
 import { basename, dirname, join } from 'node:path'
 import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs'
-import { execa } from 'execa'
 import {
   listWorktrees,
   getRepoName,
@@ -18,6 +17,7 @@ import {
   deleteBranch,
   getCurrentWorktreePath,
   isPathInWorktree,
+  forceRemoveDirectory,
 } from '../utils/git.js'
 import { getPRStatus, parseGitHubRepo, isGhCliAvailable } from '../utils/github.js'
 
@@ -384,7 +384,7 @@ export function cleanCommand() {
               const folder = item.data
               removeSpinner.start(`Removing ${folder.dirname}...`)
               try {
-                await execa('rm', ['-rf', folder.path])
+                await forceRemoveDirectory(folder.path)
                 removeSpinner.succeed(`Removed: ${folder.dirname}`)
                 abandonedRemoved++
               } catch (error) {
@@ -398,7 +398,7 @@ export function cleanCommand() {
               const orphan = item.data
               removeSpinner.start(`Removing ${orphan.dirname}...`)
               try {
-                await execa('rm', ['-rf', orphan.path])
+                await forceRemoveDirectory(orphan.path)
                 removeSpinner.succeed(`Removed: ${orphan.dirname}`)
                 orphanRemoved++
               } catch (error) {

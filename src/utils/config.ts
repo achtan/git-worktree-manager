@@ -4,9 +4,8 @@
  * Loads and parses .wtrc.json configuration file for worktree settings.
  */
 
-import { readFile, copyFile, symlink, mkdir } from 'node:fs/promises'
+import { symlink, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
-import { spawn } from 'node:child_process'
 import { z } from 'zod'
 
 /**
@@ -89,7 +88,7 @@ export async function loadConfig(mainWorktreePath: string): Promise<LoadConfigRe
   const configPath = join(mainWorktreePath, CONFIG_FILENAME)
 
   try {
-    const content = await readFile(configPath, 'utf-8')
+    const content = await Bun.file(configPath).text()
     let parsed: unknown
 
     try {
@@ -232,7 +231,7 @@ export async function copyConfigFiles(options: CopyConfigFilesOptions): Promise<
 
         try {
           await mkdir(dirname(targetPath), { recursive: true })
-          await copyFile(sourcePath, targetPath)
+          await Bun.write(targetPath, Bun.file(sourcePath))
           copied.push(file)
         } catch (error) {
           warnings.push(`Failed to copy ${file}: ${(error as Error).message}`)
@@ -295,42 +294,30 @@ export async function runPostCreateCommands(options: RunPostCreateCommandsOption
     if (command.endsWith(' &')) {
       // Detached command - spawn and don't wait
       const cmd = command.slice(0, -2).trim()
-      spawn(cmd, {
+      Bun.spawn(['sh', '-c', cmd], {
         cwd: worktreePath,
-        shell: true,
-        detached: true,
-        stdio: 'ignore',
-      }).unref()
+        stdout: 'ignore',
+        stderr: 'ignore',
+        stdin: 'ignore',
+      })
       executed.push(command)
     } else {
       // Blocking command - wait for completion
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const child = spawn(command, {
-            cwd: worktreePath,
-            shell: true,
-            stdio: 'inherit',
-          })
+      const proc = Bun.spawn(['sh', '-c', command], {
+        cwd: worktreePath,
+        stdout: 'inherit',
+        stderr: 'inherit',
+        stdin: 'inherit',
+      })
 
-          child.on('close', (code) => {
-            if (code === 0) {
-              resolve()
-            } else {
-              reject(new Error(`Command exited with code ${code}`))
-            }
-          })
-
-          child.on('error', (error) => {
-            reject(error)
-          })
-        })
-        executed.push(command)
-      } catch (error) {
+      const exitCode = await proc.exited
+      if (exitCode !== 0) {
         return {
           executed,
-          failed: { command, error: (error as Error).message },
+          failed: { command, error: `Command exited with code ${exitCode}` },
         }
       }
+      executed.push(command)
     }
   }
 

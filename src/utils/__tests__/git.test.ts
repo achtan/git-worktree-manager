@@ -1,11 +1,11 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test'
 
 // Create a mock function we can control
-const mockExeca = mock(() => Promise.resolve({ stdout: '' }))
+const mockExec = mock(() => Promise.resolve({ stdout: '' }))
 
-// Mock execa before importing git.ts
-mock.module('execa', () => ({
-  execa: mockExeca,
+// Mock exec before importing git.ts
+mock.module('../exec.js', () => ({
+  exec: mockExec,
 }))
 
 const { isPathInWorktree, listWorktrees } = await import('../git.js')
@@ -32,11 +32,11 @@ describe('isPathInWorktree', () => {
 
 describe('listWorktrees', () => {
   beforeEach(() => {
-    mockExeca.mockReset()
+    mockExec.mockReset()
   })
 
   test('parses single worktree output', async () => {
-    mockExeca.mockImplementation(() =>
+    mockExec.mockImplementation(() =>
       Promise.resolve({
         stdout: `worktree /home/user/project
 HEAD abc123def456
@@ -57,7 +57,7 @@ branch refs/heads/main
   })
 
   test('parses multiple worktrees', async () => {
-    mockExeca.mockImplementation(() =>
+    mockExec.mockImplementation(() =>
       Promise.resolve({
         stdout: `worktree /home/user/project
 HEAD abc123def456
@@ -82,7 +82,7 @@ branch refs/heads/feature/auth
   })
 
   test('first worktree is marked as main', async () => {
-    mockExeca.mockImplementation(() =>
+    mockExec.mockImplementation(() =>
       Promise.resolve({
         stdout: `worktree /home/user/project
 HEAD abc123

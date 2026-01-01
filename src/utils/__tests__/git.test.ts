@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 // Create a mock function we can control
 const mockExec = mock(() => Promise.resolve({ stdout: '' }))
@@ -42,7 +42,7 @@ describe('listWorktrees', () => {
 HEAD abc123def456
 branch refs/heads/main
 `,
-      })
+      }),
     )
 
     const worktrees = await listWorktrees()
@@ -67,7 +67,7 @@ worktree /home/user/project-worktrees/feature-auth
 HEAD def789ghi012
 branch refs/heads/feature/auth
 `,
-      })
+      }),
     )
 
     const worktrees = await listWorktrees()
@@ -92,7 +92,7 @@ worktree /home/user/project-worktrees/feat
 HEAD def456
 branch refs/heads/feature
 `,
-      })
+      }),
     )
 
     const worktrees = await listWorktrees()

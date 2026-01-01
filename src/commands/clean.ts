@@ -2,24 +2,24 @@
  * clean - Remove merged/closed worktrees
  */
 
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { multiselect } from '@clack/prompts'
 import { Command } from 'commander'
 import pc from 'picocolors'
-import { multiselect } from '@clack/prompts'
-import { createSpinner } from '../utils/spinner.js'
-import { basename, dirname, join } from 'node:path'
-import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs'
 import {
-  listWorktrees,
-  getRepoName,
-  getRemoteUrl,
-  hasUncommittedChanges,
-  removeWorktree,
   deleteBranch,
-  getCurrentWorktreePath,
-  isPathInWorktree,
   forceRemoveDirectory,
+  getCurrentWorktreePath,
+  getRemoteUrl,
+  getRepoName,
+  hasUncommittedChanges,
+  isPathInWorktree,
+  listWorktrees,
+  removeWorktree,
 } from '../utils/git.js'
-import { getPRStatus, parseGitHubRepo, isGhCliAvailable } from '../utils/github.js'
+import { getPRStatus, isGhCliAvailable, parseGitHubRepo } from '../utils/github.js'
+import { createSpinner } from '../utils/spinner.js'
 
 interface CleanableWorktree {
   path: string
@@ -159,295 +159,297 @@ export function cleanCommand() {
     .description('Remove merged/closed worktrees')
     .option('-d, --dry-run', 'Show what would be removed without actually removing')
     .option('-f, --force', 'Skip confirmation prompt')
-    .action(
-      async (options: {
-        dryRun?: boolean
-        force?: boolean
-      }) => {
-        const spinner = createSpinner()
-        try {
-          // Check gh CLI availability
-          const ghStatus = await isGhCliAvailable()
-          if (!ghStatus.available) {
-            console.error(pc.red("Error: 'gh' CLI is required for wt clean"))
-            console.log('Install it with: brew install gh')
-            process.exit(1)
-          }
-          if (!ghStatus.authenticated) {
-            console.error(pc.red('Error: gh CLI is not authenticated'))
-            console.log('Authenticate with: gh auth login')
-            process.exit(1)
-          }
-
-          // Start spinner after validation
-          spinner.start('Scanning worktrees...')
-
-          // Get repo info
-          const repoName = await getRepoName()
-          const worktrees = await listWorktrees()
-
-          // Check if GitHub repo
-          let githubInfo: { owner: string; repo: string } | null = null
-          try {
-            const remoteUrl = await getRemoteUrl()
-            githubInfo = parseGitHubRepo(remoteUrl)
-
-            if (!githubInfo) {
-              console.error(pc.red('Error: Not a GitHub repository'))
-              process.exit(1)
-            }
-          } catch {
-            console.error(pc.red('Error: No remote repository configured'))
-            process.exit(1)
-          }
-
-          // Filter worktrees to worktrees directory
-          const mainWorktree = worktrees[0]
-          const worktreesDir = join(dirname(mainWorktree.path), `${repoName}-worktrees`)
-          const filteredWorktrees = worktrees.filter((wt) => wt.path.includes(worktreesDir))
-
-          if (filteredWorktrees.length === 0) {
-            spinner.stop()
-            console.log(pc.yellow(`No worktrees found in ${worktreesDir}`))
-            return
-          }
-
-          // Update spinner for PR checking phase
-          spinner.text = 'Checking PR status...'
-
-          // Get current worktree path
-          const currentPath = await getCurrentWorktreePath()
-
-          // Gather cleanable worktrees
-          const cleanable: CleanableWorktree[] = []
-
-          for (const wt of filteredWorktrees) {
-            if (!wt.branch) continue
-
-            // Skip if current worktree
-            if (isPathInWorktree(currentPath, wt.path)) {
-              continue
-            }
-
-            // Get PR status
-            try {
-              const pr = await getPRStatus(githubInfo.owner, githubInfo.repo, wt.branch)
-              if (!pr) continue
-
-              const prState = pr.state
-              if (prState === 'merged' || prState === 'closed') {
-                const uncommitted = await hasUncommittedChanges(wt.path)
-                cleanable.push({
-                  path: wt.path,
-                  dirname: basename(wt.path),
-                  branch: wt.branch,
-                  prState,
-                  hasUncommittedChanges: uncommitted,
-                })
-              }
-            } catch {
-              // Skip if PR status check fails
-              continue
-            }
-          }
-
-          // Filter out worktrees with uncommitted changes
-          const skipped = cleanable.filter((w) => w.hasUncommittedChanges)
-          const toRemove = cleanable.filter((w) => !w.hasUncommittedChanges)
-
-          // Find abandoned folders and orphan worktrees
-          spinner.text = 'Scanning for abandoned folders...'
-          const abandonedFolders = findAbandonedFolders(worktreesDir)
-          const orphanWorktrees = findOrphanWorktrees(worktreesDir)
-
-          // Stop spinner before displaying results
-          spinner.stop()
-
-          if (cleanable.length === 0 && abandonedFolders.length === 0 && orphanWorktrees.length === 0) {
-            console.log(pc.green('✓ No merged/closed worktrees, abandoned folders, or orphan worktrees found'))
-            return
-          }
-
-          // Build checkbox choices
-          type ChoiceValue =
-            | { type: 'worktree'; data: CleanableWorktree }
-            | { type: 'abandoned'; data: AbandonedFolder }
-            | { type: 'orphan'; data: OrphanWorktree }
-          const choices: { name: string; value: ChoiceValue; checked: boolean }[] = []
-
-          for (const wt of toRemove) {
-            const stateLabel = wt.prState === 'merged' ? pc.green('MERGED') : pc.yellow('CLOSED')
-            choices.push({
-              name: `${wt.dirname} (${stateLabel})`,
-              value: { type: 'worktree', data: wt },
-              checked: false,
-            })
-          }
-
-          for (const folder of abandonedFolders) {
-            choices.push({
-              name: `${folder.dirname} ${pc.gray('(abandoned)')}`,
-              value: { type: 'abandoned', data: folder },
-              checked: false,
-            })
-          }
-
-          for (const orphan of orphanWorktrees) {
-            choices.push({
-              name: `${orphan.dirname} ${pc.yellow('(orphan)')}`,
-              value: { type: 'orphan', data: orphan },
-              checked: false,
-            })
-          }
-
-          // Show skipped worktrees
-          if (skipped.length > 0) {
-            console.log(pc.yellow('⚠ Skipped (uncommitted changes):'))
-            for (const wt of skipped) {
-              console.log(`  ${wt.dirname} (${wt.branch})`)
-            }
-            console.log()
-          }
-
-          if (choices.length === 0) {
-            console.log(pc.yellow('No worktrees can be removed (all have uncommitted changes)'))
-            return
-          }
-
-          // Dry run mode
-          if (options.dryRun) {
-            console.log(pc.bold('Would remove:'))
-            for (const choice of choices) {
-              console.log(`  ${choice.name}`)
-            }
-            return
-          }
-
-          // Interactive selection (skip if --force)
-          let selectedItems: ChoiceValue[]
-          if (options.force) {
-            selectedItems = choices.map(c => c.value)
-          } else {
-            const result = await multiselect({
-              message: 'Select worktrees to remove:',
-              options: choices.map(c => ({
-                label: c.name,
-                value: c.value,
-              })),
-            })
-
-            if (typeof result === 'symbol') {
-              // User cancelled
-              return
-            }
-            selectedItems = result as ChoiceValue[]
-          }
-
-          if (selectedItems.length === 0) {
-            console.log(pc.yellow('No worktrees selected'))
-            return
-          }
-
-          console.log()
-
-          // Remove selected items
-          let removed = 0
-          let failed = 0
-          let abandonedRemoved = 0
-          let abandonedFailed = 0
-          let orphanRemoved = 0
-          let orphanFailed = 0
-
-          const removeSpinner = createSpinner()
-
-          for (const item of selectedItems) {
-            if (item.type === 'worktree') {
-              const wt = item.data
-              removeSpinner.start(`Removing ${wt.dirname}...`)
-              try {
-                await removeWorktree(wt.path, true)
-                try {
-                  await deleteBranch(wt.branch, true)
-                  removeSpinner.succeed(`Removed: ${wt.dirname} (branch deleted)`)
-                } catch {
-                  removeSpinner.succeed(`Removed: ${wt.dirname}` + pc.yellow(` (branch kept)`))
-                }
-                removed++
-              } catch (error) {
-                removeSpinner.fail(`Failed to remove: ${wt.dirname}`)
-                if (error instanceof Error) {
-                  console.log(pc.red(`  ${error.message}`))
-                }
-                failed++
-              }
-            } else if (item.type === 'abandoned') {
-              const folder = item.data
-              removeSpinner.start(`Removing ${folder.dirname}...`)
-              try {
-                await forceRemoveDirectory(folder.path)
-                removeSpinner.succeed(`Removed: ${folder.dirname}`)
-                abandonedRemoved++
-              } catch (error) {
-                removeSpinner.fail(`Failed to remove: ${folder.dirname}`)
-                if (error instanceof Error) {
-                  console.log(pc.red(`  ${error.message}`))
-                }
-                abandonedFailed++
-              }
-            } else {
-              const orphan = item.data
-              removeSpinner.start(`Removing ${orphan.dirname}...`)
-              try {
-                await forceRemoveDirectory(orphan.path)
-                removeSpinner.succeed(`Removed: ${orphan.dirname}`)
-                orphanRemoved++
-              } catch (error) {
-                removeSpinner.fail(`Failed to remove: ${orphan.dirname}`)
-                if (error instanceof Error) {
-                  console.log(pc.red(`  ${error.message}`))
-                }
-                orphanFailed++
-              }
-            }
-          }
-
-          // Summary
-          console.log('━'.repeat(60))
-
-          const foldersRemoved = abandonedRemoved + orphanRemoved
-          const foldersFailed = abandonedFailed + orphanFailed
-          const totalRemoved = removed + foldersRemoved
-
-          if (removed > 0 && foldersRemoved > 0) {
-            console.log(pc.green(`✓ Cleaned up ${removed} worktree(s) and ${foldersRemoved} folder(s)!`))
-          } else if (removed > 0) {
-            console.log(pc.green(`✓ Cleaned up ${removed} worktree(s)!`))
-          } else if (foldersRemoved > 0) {
-            console.log(pc.green(`✓ Cleaned up ${foldersRemoved} folder(s)!`))
-          }
-
-          if (failed > 0 && foldersFailed > 0) {
-            console.log(pc.red(`✗ Failed to remove ${failed} worktree(s) and ${foldersFailed} folder(s)`))
-          } else if (failed > 0) {
-            console.log(pc.red(`✗ Failed to remove ${failed} worktree(s)`))
-          } else if (foldersFailed > 0) {
-            console.log(pc.red(`✗ Failed to remove ${foldersFailed} folder(s)`))
-          }
-
-          if (totalRemoved > 0) {
-            console.log("Run 'wt list' to see remaining worktrees.")
-          }
-        } catch (error) {
-          spinner.stop()
-          if (error instanceof Error) {
-            console.error(pc.red(`Error: ${error.message}`))
-          } else {
-            console.error(pc.red('An unknown error occurred'))
-          }
+    .action(async (options: { dryRun?: boolean; force?: boolean }) => {
+      const spinner = createSpinner()
+      try {
+        // Check gh CLI availability
+        const ghStatus = await isGhCliAvailable()
+        if (!ghStatus.available) {
+          console.error(pc.red("Error: 'gh' CLI is required for wt clean"))
+          console.log('Install it with: brew install gh')
           process.exit(1)
         }
-      },
-    )
+        if (!ghStatus.authenticated) {
+          console.error(pc.red('Error: gh CLI is not authenticated'))
+          console.log('Authenticate with: gh auth login')
+          process.exit(1)
+        }
+
+        // Start spinner after validation
+        spinner.start('Scanning worktrees...')
+
+        // Get repo info
+        const repoName = await getRepoName()
+        const worktrees = await listWorktrees()
+
+        // Check if GitHub repo
+        let githubInfo: { owner: string; repo: string } | null = null
+        try {
+          const remoteUrl = await getRemoteUrl()
+          githubInfo = parseGitHubRepo(remoteUrl)
+
+          if (!githubInfo) {
+            console.error(pc.red('Error: Not a GitHub repository'))
+            process.exit(1)
+          }
+        } catch {
+          console.error(pc.red('Error: No remote repository configured'))
+          process.exit(1)
+        }
+
+        // Filter worktrees to worktrees directory
+        const mainWorktree = worktrees[0]
+        const worktreesDir = join(dirname(mainWorktree.path), `${repoName}-worktrees`)
+        const filteredWorktrees = worktrees.filter((wt) => wt.path.includes(worktreesDir))
+
+        if (filteredWorktrees.length === 0) {
+          spinner.stop()
+          console.log(pc.yellow(`No worktrees found in ${worktreesDir}`))
+          return
+        }
+
+        // Update spinner for PR checking phase
+        spinner.text = 'Checking PR status...'
+
+        // Get current worktree path
+        const currentPath = await getCurrentWorktreePath()
+
+        // Gather cleanable worktrees
+        const cleanable: CleanableWorktree[] = []
+
+        for (const wt of filteredWorktrees) {
+          if (!wt.branch) continue
+
+          // Skip if current worktree
+          if (isPathInWorktree(currentPath, wt.path)) {
+            continue
+          }
+
+          // Get PR status
+          try {
+            const pr = await getPRStatus(githubInfo.owner, githubInfo.repo, wt.branch)
+            if (!pr) continue
+
+            const prState = pr.state
+            if (prState === 'merged' || prState === 'closed') {
+              const uncommitted = await hasUncommittedChanges(wt.path)
+              cleanable.push({
+                path: wt.path,
+                dirname: basename(wt.path),
+                branch: wt.branch,
+                prState,
+                hasUncommittedChanges: uncommitted,
+              })
+            }
+          } catch {}
+        }
+
+        // Filter out worktrees with uncommitted changes
+        const skipped = cleanable.filter((w) => w.hasUncommittedChanges)
+        const toRemove = cleanable.filter((w) => !w.hasUncommittedChanges)
+
+        // Find abandoned folders and orphan worktrees
+        spinner.text = 'Scanning for abandoned folders...'
+        const abandonedFolders = findAbandonedFolders(worktreesDir)
+        const orphanWorktrees = findOrphanWorktrees(worktreesDir)
+
+        // Stop spinner before displaying results
+        spinner.stop()
+
+        if (
+          cleanable.length === 0 &&
+          abandonedFolders.length === 0 &&
+          orphanWorktrees.length === 0
+        ) {
+          console.log(
+            pc.green('✓ No merged/closed worktrees, abandoned folders, or orphan worktrees found'),
+          )
+          return
+        }
+
+        // Build checkbox choices
+        type ChoiceValue =
+          | { type: 'worktree'; data: CleanableWorktree }
+          | { type: 'abandoned'; data: AbandonedFolder }
+          | { type: 'orphan'; data: OrphanWorktree }
+        const choices: { name: string; value: ChoiceValue; checked: boolean }[] = []
+
+        for (const wt of toRemove) {
+          const stateLabel = wt.prState === 'merged' ? pc.green('MERGED') : pc.yellow('CLOSED')
+          choices.push({
+            name: `${wt.dirname} (${stateLabel})`,
+            value: { type: 'worktree', data: wt },
+            checked: false,
+          })
+        }
+
+        for (const folder of abandonedFolders) {
+          choices.push({
+            name: `${folder.dirname} ${pc.gray('(abandoned)')}`,
+            value: { type: 'abandoned', data: folder },
+            checked: false,
+          })
+        }
+
+        for (const orphan of orphanWorktrees) {
+          choices.push({
+            name: `${orphan.dirname} ${pc.yellow('(orphan)')}`,
+            value: { type: 'orphan', data: orphan },
+            checked: false,
+          })
+        }
+
+        // Show skipped worktrees
+        if (skipped.length > 0) {
+          console.log(pc.yellow('⚠ Skipped (uncommitted changes):'))
+          for (const wt of skipped) {
+            console.log(`  ${wt.dirname} (${wt.branch})`)
+          }
+          console.log()
+        }
+
+        if (choices.length === 0) {
+          console.log(pc.yellow('No worktrees can be removed (all have uncommitted changes)'))
+          return
+        }
+
+        // Dry run mode
+        if (options.dryRun) {
+          console.log(pc.bold('Would remove:'))
+          for (const choice of choices) {
+            console.log(`  ${choice.name}`)
+          }
+          return
+        }
+
+        // Interactive selection (skip if --force)
+        let selectedItems: ChoiceValue[]
+        if (options.force) {
+          selectedItems = choices.map((c) => c.value)
+        } else {
+          const result = await multiselect({
+            message: 'Select worktrees to remove:',
+            options: choices.map((c) => ({
+              label: c.name,
+              value: c.value,
+            })),
+          })
+
+          if (typeof result === 'symbol') {
+            // User cancelled
+            return
+          }
+          selectedItems = result as ChoiceValue[]
+        }
+
+        if (selectedItems.length === 0) {
+          console.log(pc.yellow('No worktrees selected'))
+          return
+        }
+
+        console.log()
+
+        // Remove selected items
+        let removed = 0
+        let failed = 0
+        let abandonedRemoved = 0
+        let abandonedFailed = 0
+        let orphanRemoved = 0
+        let orphanFailed = 0
+
+        const removeSpinner = createSpinner()
+
+        for (const item of selectedItems) {
+          if (item.type === 'worktree') {
+            const wt = item.data
+            removeSpinner.start(`Removing ${wt.dirname}...`)
+            try {
+              await removeWorktree(wt.path, true)
+              try {
+                await deleteBranch(wt.branch, true)
+                removeSpinner.succeed(`Removed: ${wt.dirname} (branch deleted)`)
+              } catch {
+                removeSpinner.succeed(`Removed: ${wt.dirname}${pc.yellow(` (branch kept)`)}`)
+              }
+              removed++
+            } catch (error) {
+              removeSpinner.fail(`Failed to remove: ${wt.dirname}`)
+              if (error instanceof Error) {
+                console.log(pc.red(`  ${error.message}`))
+              }
+              failed++
+            }
+          } else if (item.type === 'abandoned') {
+            const folder = item.data
+            removeSpinner.start(`Removing ${folder.dirname}...`)
+            try {
+              await forceRemoveDirectory(folder.path)
+              removeSpinner.succeed(`Removed: ${folder.dirname}`)
+              abandonedRemoved++
+            } catch (error) {
+              removeSpinner.fail(`Failed to remove: ${folder.dirname}`)
+              if (error instanceof Error) {
+                console.log(pc.red(`  ${error.message}`))
+              }
+              abandonedFailed++
+            }
+          } else {
+            const orphan = item.data
+            removeSpinner.start(`Removing ${orphan.dirname}...`)
+            try {
+              await forceRemoveDirectory(orphan.path)
+              removeSpinner.succeed(`Removed: ${orphan.dirname}`)
+              orphanRemoved++
+            } catch (error) {
+              removeSpinner.fail(`Failed to remove: ${orphan.dirname}`)
+              if (error instanceof Error) {
+                console.log(pc.red(`  ${error.message}`))
+              }
+              orphanFailed++
+            }
+          }
+        }
+
+        // Summary
+        console.log('━'.repeat(60))
+
+        const foldersRemoved = abandonedRemoved + orphanRemoved
+        const foldersFailed = abandonedFailed + orphanFailed
+        const totalRemoved = removed + foldersRemoved
+
+        if (removed > 0 && foldersRemoved > 0) {
+          console.log(
+            pc.green(`✓ Cleaned up ${removed} worktree(s) and ${foldersRemoved} folder(s)!`),
+          )
+        } else if (removed > 0) {
+          console.log(pc.green(`✓ Cleaned up ${removed} worktree(s)!`))
+        } else if (foldersRemoved > 0) {
+          console.log(pc.green(`✓ Cleaned up ${foldersRemoved} folder(s)!`))
+        }
+
+        if (failed > 0 && foldersFailed > 0) {
+          console.log(
+            pc.red(`✗ Failed to remove ${failed} worktree(s) and ${foldersFailed} folder(s)`),
+          )
+        } else if (failed > 0) {
+          console.log(pc.red(`✗ Failed to remove ${failed} worktree(s)`))
+        } else if (foldersFailed > 0) {
+          console.log(pc.red(`✗ Failed to remove ${foldersFailed} folder(s)`))
+        }
+
+        if (totalRemoved > 0) {
+          console.log("Run 'wt list' to see remaining worktrees.")
+        }
+      } catch (error) {
+        spinner.stop()
+        if (error instanceof Error) {
+          console.error(pc.red(`Error: ${error.message}`))
+        } else {
+          console.error(pc.red('An unknown error occurred'))
+        }
+        process.exit(1)
+      }
+    })
 
   return cmd
 }

@@ -2,23 +2,23 @@
  * remove - Remove a specific worktree by name
  */
 
+import { basename, dirname, join } from 'node:path'
+import { select } from '@clack/prompts'
 import { Command } from 'commander'
 import pc from 'picocolors'
-import { select } from '@clack/prompts'
-import { createSpinner } from '../utils/spinner.js'
-import { basename, dirname, join } from 'node:path'
 import {
-  listWorktrees,
-  getRepoName,
-  hasUncommittedChanges,
-  removeWorktree,
   deleteBranch,
-  hasUnpushedCommits,
-  getWorktreeChanges,
-  getGitDiff,
   forceRemoveDirectory,
+  getGitDiff,
+  getRepoName,
+  getWorktreeChanges,
+  hasUncommittedChanges,
+  hasUnpushedCommits,
+  listWorktrees,
   pruneWorktrees,
+  removeWorktree,
 } from '../utils/git.js'
+import { createSpinner } from '../utils/spinner.js'
 
 export function removeCommand() {
   const cmd = new Command('remove')
@@ -27,7 +27,10 @@ export function removeCommand() {
     .description('Remove a specific worktree and its branch')
     .argument('<name>', 'Worktree name (branch name or directory name)')
     .option('--keep-branch', 'Keep the local branch after removing worktree')
-    .option('-f, --force', 'Force removal even if there are uncommitted changes or unpushed commits')
+    .option(
+      '-f, --force',
+      'Force removal even if there are uncommitted changes or unpushed commits',
+    )
     .action(
       async (
         name: string,
@@ -66,9 +69,7 @@ export function removeCommand() {
           if (!matchedWorktree) {
             spinner.stop()
             console.error(pc.red(`Error: No worktree found matching '${name}'`))
-            console.log(
-              pc.gray(`\nRun 'wt list' to see available worktrees`),
-            )
+            console.log(pc.gray(`\nRun 'wt list' to see available worktrees`))
             process.exit(1)
           }
 

@@ -1,11 +1,11 @@
 /**
  * Config utilities
  *
- * Loads and parses .wtrc.json configuration file for worktree settings.
+ * Loads and parses .wtrc.js configuration file for worktree settings.
  */
 
-import { symlink, mkdir } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
+import { mkdir, symlink } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
 
 /**
@@ -13,8 +13,8 @@ import { z } from 'zod'
  * Patterns starting with ! are negations
  */
 async function expandGlobs(patterns: string[], cwd: string): Promise<string[]> {
-  const positive = patterns.filter(p => !p.startsWith('!'))
-  const negative = patterns.filter(p => p.startsWith('!')).map(p => p.slice(1))
+  const positive = patterns.filter((p) => !p.startsWith('!'))
+  const negative = patterns.filter((p) => p.startsWith('!')).map((p) => p.slice(1))
 
   const results: string[] = []
   for (const pattern of positive) {
@@ -30,14 +30,12 @@ async function expandGlobs(patterns: string[], cwd: string): Promise<string[]> {
   // Filter out negated patterns
   if (negative.length === 0) return unique
 
-  const negativeGlobs = negative.map(p => new Bun.Glob(p))
-  return unique.filter(file =>
-    !negativeGlobs.some(glob => glob.match(file))
-  )
+  const negativeGlobs = negative.map((p) => new Bun.Glob(p))
+  return unique.filter((file) => !negativeGlobs.some((glob) => glob.match(file)))
 }
 
 /**
- * Zod schema for .wtrc.json validation
+ * Zod schema for .wtrc.js validation
  */
 const WtConfigSchema = z.object({
   worktreePath: z.string().optional(),
@@ -64,7 +62,7 @@ export interface LoadConfigResult {
   source: 'file' | 'defaults'
 }
 
-const CONFIG_FILENAME = '.wtrc.json'
+const CONFIG_FILENAME = '.wtrc.js'
 
 /**
  * Get default configuration
@@ -79,7 +77,7 @@ export function getDefaults(): WtConfig {
 }
 
 /**
- * Load configuration from .wtrc.json in main worktree
+ * Load configuration from .wtrc.js in main worktree
  * Returns defaults if config file not found
  * Throws ConfigValidationError if config exists but is invalid
  */
@@ -88,26 +86,17 @@ export async function loadConfig(mainWorktreePath: string): Promise<LoadConfigRe
   const configPath = join(mainWorktreePath, CONFIG_FILENAME)
 
   try {
-    const content = await Bun.file(configPath).text()
-    let parsed: unknown
-
-    try {
-      parsed = JSON.parse(content)
-    } catch (jsonError) {
-      throw new ConfigValidationError(
-        `Invalid JSON in ${CONFIG_FILENAME}: ${(jsonError as Error).message}`,
-        configPath
-      )
+    const file = Bun.file(configPath)
+    if (!(await file.exists())) {
+      return { config: defaults, source: 'defaults' }
     }
 
-    const result = WtConfigSchema.safeParse(parsed)
+    const module = await import(configPath)
+    const config = module.default ?? module
 
+    const result = WtConfigSchema.safeParse(config)
     if (!result.success) {
-      throw new ConfigValidationError(
-        formatZodErrors(result.error),
-        configPath,
-        result.error
-      )
+      throw new ConfigValidationError(formatZodErrors(result.error), configPath, result.error)
     }
 
     const validated = result.data
@@ -121,16 +110,11 @@ export async function loadConfig(mainWorktreePath: string): Promise<LoadConfigRe
       source: 'file',
     }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { config: defaults, source: 'defaults' }
-    }
-
-    // Re-throw ConfigValidationError as-is
-    if (error instanceof ConfigValidationError) {
-      throw error
-    }
-
-    throw error
+    if (error instanceof ConfigValidationError) throw error
+    throw new ConfigValidationError(
+      `Failed to load ${CONFIG_FILENAME}: ${(error as Error).message}`,
+      configPath,
+    )
   }
 }
 
@@ -141,7 +125,7 @@ export class ConfigValidationError extends Error {
   constructor(
     message: string,
     public readonly configPath: string,
-    public readonly zodError?: z.ZodError
+    public readonly zodError?: z.ZodError,
   ) {
     super(message)
     this.name = 'ConfigValidationError'
@@ -152,21 +136,21 @@ export class ConfigValidationError extends Error {
  * Format Zod errors into a readable string
  */
 function formatZodErrors(error: z.ZodError): string {
-  const lines = error.issues.map(issue => {
+  const lines = error.issues.map((issue) => {
     const path = issue.path.length > 0 ? issue.path.join('.') : 'root'
     return `  - ${path}: ${issue.message}`
   })
-  return `Invalid ${CONFIG_FILENAME}:\n${lines.join('\n')}`
+  return `Invalid .wtrc.js:\n${lines.join('\n')}`
 }
 
 /**
  * Template variables for config value substitution
  */
 export interface TemplateVariables {
-  PATH: string    // Full worktree path
-  BRANCH: string  // Original branch name (e.g., "feature/auth")
-  DIR: string     // Directory name with dashes (e.g., "feature-auth")
-  REPO: string    // Repository name
+  PATH: string // Full worktree path
+  BRANCH: string // Original branch name (e.g., "feature/auth")
+  DIR: string // Directory name with dashes (e.g., "feature-auth")
+  REPO: string // Repository name
 }
 
 /**
@@ -191,7 +175,7 @@ export function resolveConfig(config: WtConfig, vars: TemplateVariables): WtConf
     worktreePath: resolveTemplate(config.worktreePath, vars),
     copy: config.copy,
     symlink: config.symlink,
-    postCreate: config.postCreate.map(cmd => resolveTemplate(cmd, vars)),
+    postCreate: config.postCreate.map((cmd) => resolveTemplate(cmd, vars)),
   }
 }
 

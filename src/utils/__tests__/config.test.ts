@@ -1,14 +1,14 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
-import { mkdir, writeFile, rm, readFile, lstat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
-  resolveTemplate,
-  resolveConfig,
+  ConfigValidationError,
+  copyConfigFiles,
   getDefaults,
   loadConfig,
-  copyConfigFiles,
-  ConfigValidationError,
+  resolveConfig,
+  resolveTemplate,
   type TemplateVariables,
 } from '../config.js'
 
@@ -141,13 +141,13 @@ describe('loadConfig', () => {
   })
 
   test('valid config file returns config', async () => {
-    const config = {
+    const configContent = `export default {
       worktreePath: '../worktrees/$DIR',
       copy: ['.env'],
       symlink: ['node_modules'],
       postCreate: ['bun install'],
-    }
-    await writeFile(join(tempDir, '.wtrc.json'), JSON.stringify(config))
+    }`
+    await writeFile(join(tempDir, '.wtrc.js'), configContent)
 
     const result = await loadConfig(tempDir)
 
@@ -165,15 +165,15 @@ describe('loadConfig', () => {
     expect(result.config).toEqual(getDefaults())
   })
 
-  test('invalid JSON throws ConfigValidationError', async () => {
-    await writeFile(join(tempDir, '.wtrc.json'), 'not valid json{')
+  test('invalid JS throws ConfigValidationError', async () => {
+    await writeFile(join(tempDir, '.wtrc.js'), 'export default { invalid syntax')
 
     expect(loadConfig(tempDir)).rejects.toThrow(ConfigValidationError)
   })
 
   test('partial config uses defaults for missing fields', async () => {
-    const config = { copy: ['.env'] }
-    await writeFile(join(tempDir, '.wtrc.json'), JSON.stringify(config))
+    const configContent = `export default { copy: ['.env'] }`
+    await writeFile(join(tempDir, '.wtrc.js'), configContent)
 
     const result = await loadConfig(tempDir)
 

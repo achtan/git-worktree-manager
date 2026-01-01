@@ -34,7 +34,7 @@ And when you're done? `wt clean` finds all merged/closed PRs and removes their w
 bun install -g .
 
 # Create a new worktree
-wt feature/my-feature
+wt new feature/my-feature
 
 # See all worktrees with PR status
 wt list
@@ -45,16 +45,12 @@ wt clean
 
 ## Commands
 
-### `wt <branch-name> [base-branch]`
 ### `wt new <branch-name> [base-branch]`
 
 Create a new worktree for a new branch. Worktrees are created in `../<repo>-worktrees/` directory.
 
 ```bash
-# Create worktree from default branch (shorthand)
-wt feature/new-feature
-
-# Create worktree from default branch (explicit)
+# Create worktree from default branch
 wt new feature/new-feature
 
 # Create worktree from specific base branch
@@ -70,7 +66,7 @@ wt new feature/new-feature develop
 - Converts slashes in branch names to dashes for directory names (e.g., `feature/foo` → `feature-foo`)
 - Shows spinner during creation
 - Fails if branch already exists locally
-- Copies/symlinks files based on `.wtrc.json` config (see [Configuration](#configuration))
+- Copies/symlinks files based on `.wtrc.js` config (see [Configuration](#configuration))
 - Runs post-create commands from config
 - Copies worktree path to clipboard for easy navigation
 
@@ -225,25 +221,37 @@ Modified:
 Run 'wt list' to see remaining worktrees
 ```
 
+### `wt init`
+
+Initialize a `.wtrc.js` configuration file in the current repository.
+
+```bash
+wt init
+```
+
+**Behavior:**
+- Creates `.wtrc.js` in the main worktree root with default configuration
+- If config already exists, shows a message and exits without overwriting
+
 ## Configuration
 
-Create a `.wtrc.json` file in your repository root to configure worktree behavior:
+Create a `.wtrc.js` file in your repository root to configure worktree behavior (or use `wt init`):
 
-```json
-{
-  "worktreePath": "$REPO-worktrees/$DIR",
-  "copy": [
-    ".idea/runConfigurations/**",
-    ".idea/codeStyles/**",
-    "!.idea/workspace.xml"
+```javascript
+export default {
+  worktreePath: '$REPO-worktrees/$DIR',
+  copy: [
+    '.idea/runConfigurations/**',
+    '.idea/codeStyles/**',
+    '!.idea/workspace.xml'
   ],
-  "symlink": [
-    ".env"
+  symlink: [
+    '.env'
   ],
-  "postCreate": [
-    "npm install",
-    "code $PATH &"
-  ]
+  postCreate: [
+    'npm install',
+    'code $PATH &'
+  ],
 }
 ```
 
@@ -284,12 +292,12 @@ Commands run sequentially in the new worktree directory:
 - Other commands run blocking
 - Execution stops on first failure
 
-```json
-{
-  "postCreate": [
-    "npm install",
-    "code $PATH &"
-  ]
+```javascript
+export default {
+  postCreate: [
+    'npm install',
+    'code $PATH &'
+  ],
 }
 ```
 
@@ -336,7 +344,7 @@ Here's a typical workflow using these tools:
 
 ```bash
 # Create a new worktree for a feature
-wt feature/add-auth
+wt new feature/add-auth
 
 # Navigate to the worktree
 cd ../my-repo-worktrees/feature-add-auth

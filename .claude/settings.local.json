@@ -11,7 +11,12 @@
       "Bash(npm view:*)",
       "WebFetch(domain:www.npmjs.com)",
       "WebSearch",
-      "Bash(./dist/cli.js:*)"
+      "Bash(./dist/cli.js:*)",
+      "Bash(bun run build)",
+      "Bash(bun run typecheck:*)",
+      "Bash(bun test)",
+      "Bash(bun run check:fix:*)",
+      "Bash(bun run check:*)"
     ],
     "deny": [],
     "ask": []

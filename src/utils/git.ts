@@ -4,9 +4,9 @@
  * Helper functions for executing Git commands using execa.
  */
 
-import { exec } from './exec.js'
 import { mkdir } from 'node:fs/promises'
 import { basename } from 'node:path'
+import { exec } from './exec.js'
 
 /**
  * Worktree information
@@ -214,16 +214,8 @@ export async function getAheadBehind(
   baseBranch: string,
 ): Promise<{ ahead: number; behind: number }> {
   try {
-    const aheadResult = await exec('git', [
-      'rev-list',
-      '--count',
-      `${baseBranch}..${branch}`,
-    ])
-    const behindResult = await exec('git', [
-      'rev-list',
-      '--count',
-      `${branch}..${baseBranch}`,
-    ])
+    const aheadResult = await exec('git', ['rev-list', '--count', `${baseBranch}..${branch}`])
+    const behindResult = await exec('git', ['rev-list', '--count', `${branch}..${baseBranch}`])
 
     return {
       ahead: parseInt(aheadResult.stdout, 10) || 0,

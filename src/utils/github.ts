@@ -52,7 +52,7 @@ export async function getOctokit(): Promise<Octokit> {
     const { stdout } = await exec('gh', ['auth', 'token'])
     const token = stdout.trim()
     return new Octokit({ auth: token })
-  } catch (error) {
+  } catch (_error) {
     throw new Error('GitHub CLI not authenticated. Run: gh auth login')
   }
 }
@@ -131,7 +131,7 @@ export async function getPRStatus(
       isDraft: pr.draft || false,
       checksStatus,
     }
-  } catch (error) {
+  } catch (_error) {
     return null
   }
 }

@@ -1,0 +1,17 @@
+export default {
+  worktreePath: '$REPO-worktrees/$DIR',
+  copy: [
+    '.claude/settings.local.json',
+    '.idea/runConfigurations/**',
+    '.idea/codeStyles/**',
+    '.idea/inspectionProfiles/**',
+    '.idea/scopes/**',
+    '.idea/modules.xml',
+    '.idea/vcs.xml',
+    '.idea/encodings.xml',
+    '.idea/misc.xml',
+    '.idea/*.iml',
+  ],
+  symlink: ['.env'],
+  postCreate: ['npm install'],
+}

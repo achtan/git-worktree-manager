@@ -2,25 +2,25 @@
  * config - Display current configuration
  */
 
+import { join } from 'node:path'
 import { Command } from 'commander'
 import pc from 'picocolors'
-import { join } from 'node:path'
-import { getMainWorktreePath, getRepoName } from '../utils/git.js'
 import { loadConfig } from '../utils/config.js'
+import { getMainWorktreePath, getRepoName } from '../utils/git.js'
 
 export function configCommand() {
   const cmd = new Command('config')
 
-  cmd.description('Display current .wtrc.json configuration').action(async () => {
+  cmd.description('Display current .wtrc.js configuration').action(async () => {
     try {
       const mainWorktreePath = await getMainWorktreePath()
       const repoName = await getRepoName()
-      const configPath = join(mainWorktreePath, '.wtrc.json')
+      const configPath = join(mainWorktreePath, '.wtrc.js')
       const { config, source } = await loadConfig(mainWorktreePath)
 
       // Show config file status
       if (source === 'defaults') {
-        console.log(pc.gray('Config: No .wtrc.json found (using defaults)'))
+        console.log(pc.gray('Config: No .wtrc.js found (using defaults)'))
       } else {
         console.log(pc.gray(`Config: ${configPath}`))
       }

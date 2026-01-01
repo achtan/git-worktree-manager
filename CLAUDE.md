@@ -11,14 +11,14 @@ bun run build
 # Watch mode for development
 bun run dev
 
-# Lint TypeScript files
-bun run lint
+# Type check
+bun run typecheck
 
-# Format code
-bun run format
+# Lint + format (check only)
+bun run check
 
-# Check formatting
-bun run format:check
+# Lint + format (with fixes)
+bun run check:fix
 ```
 
 ## Testing the CLI
@@ -40,8 +40,7 @@ This is a Git worktree manager that creates worktrees in a `<repo>-worktrees/` d
 
 **CLI Entry (`src/cli.ts`)**
 - Uses Commander.js with subcommand pattern
-- Supports default action: bare branch name (e.g., `wt feature/foo`) automatically invokes `new` command
-- Commands: `new`, `list`, `clean`, `remove`
+- Commands: `new`, `list`, `clean`, `remove`, `config`, `init`
 
 **Git Utilities (`src/utils/git.ts`)**
 - All Git operations use `execa` to shell out to Git CLI
@@ -57,10 +56,12 @@ This is a Git worktree manager that creates worktrees in a `<repo>-worktrees/` d
 - All GitHub features require `gh` CLI to be installed and authenticated
 
 **Commands**
-- `new`: Creates worktree, symlinks `.env`, copies `.claude/settings.local.json`, runs `post-worktree-created` hook from package.json
+- `new`: Creates worktree, copies/symlinks files per `.wtrc.js`, runs postCreate commands
 - `list`: Shows all worktrees with PR status, ahead/behind counts, uncommitted changes
 - `clean`: Interactive removal of merged/closed worktrees with safety checks
 - `remove`: Removes specific worktree by name
+- `config`: Displays current `.wtrc.js` configuration
+- `init`: Creates `.wtrc.js` with defaults in repository root
 
 ### Important Patterns
 
@@ -80,10 +81,10 @@ This is a Git worktree manager that creates worktrees in a `<repo>-worktrees/` d
 4. Query GitHub API using Octokit
 5. Gracefully degrade if any step fails
 
-**Post-Worktree Hook**
-- After creating worktree, checks for `post-worktree-created` script in package.json
-- Executes hook with `npm run post-worktree-created` in the new worktree directory
-- Default hook: `npm install`
+**Post-Create Commands**
+- Configured via `postCreate` array in `.wtrc.js`
+- Commands run sequentially in the new worktree directory
+- Commands ending with ` &` run detached (don't wait for completion)
 
 ## TypeScript Configuration
 

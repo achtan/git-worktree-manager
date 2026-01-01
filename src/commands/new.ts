@@ -2,26 +2,26 @@
  * new - Create new worktree with branch
  */
 
+import { basename, dirname, join } from 'node:path'
 import { Command } from 'commander'
 import pc from 'picocolors'
-import { createSpinner } from '../utils/spinner.js'
-import { join, dirname, basename } from 'node:path'
-import {
-  getMainWorktreePath,
-  getDefaultBranch,
-  branchExists,
-  ensureDir,
-  createWorktree,
-  fetchOrigin,
-} from '../utils/git.js'
 import { copyToClipboard } from '../utils/clipboard.js'
 import {
+  copyConfigFiles,
   loadConfig,
   resolveTemplate,
-  copyConfigFiles,
   runPostCreateCommands,
   type TemplateVariables,
 } from '../utils/config.js'
+import {
+  branchExists,
+  createWorktree,
+  ensureDir,
+  fetchOrigin,
+  getDefaultBranch,
+  getMainWorktreePath,
+} from '../utils/git.js'
+import { createSpinner } from '../utils/spinner.js'
 
 export function newCommand() {
   const cmd = new Command('new')
@@ -46,7 +46,7 @@ export function newCommand() {
         const mainWorktreePath = await getMainWorktreePath()
         const repoName = basename(mainWorktreePath)
 
-        // Load config from .wtrc.json (throws if config exists but is invalid)
+        // Load config from .wtrc.js (throws if config exists but is invalid)
         const { config } = await loadConfig(mainWorktreePath)
 
         // Convert branch name slashes to dashes for directory name
@@ -105,7 +105,9 @@ export function newCommand() {
             console.log(pc.gray(`  Copied ${result.copied.length} file(s) from main worktree`))
           }
           if (result.symlinked.length > 0) {
-            console.log(pc.gray(`  Symlinked ${result.symlinked.length} file(s) from main worktree`))
+            console.log(
+              pc.gray(`  Symlinked ${result.symlinked.length} file(s) from main worktree`),
+            )
           }
           for (const warning of result.warnings) {
             console.log(pc.yellow(`  ⚠ ${warning}`))
@@ -115,7 +117,9 @@ export function newCommand() {
         // Run post-create commands
         if (config.postCreate.length > 0) {
           // Resolve template variables in commands
-          const resolvedCommands = config.postCreate.map(cmd => resolveTemplate(cmd, templateVars))
+          const resolvedCommands = config.postCreate.map((cmd) =>
+            resolveTemplate(cmd, templateVars),
+          )
 
           const result = await runPostCreateCommands({
             worktreePath,

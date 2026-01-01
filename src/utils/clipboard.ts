@@ -1,5 +1,5 @@
-import { exec } from 'child_process'
-import { platform } from 'os'
+import { exec } from 'node:child_process'
+import { platform } from 'node:os'
 
 export function copyToClipboard(text: string): Promise<boolean> {
   return new Promise((resolve) => {

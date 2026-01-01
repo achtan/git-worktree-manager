@@ -2,21 +2,21 @@
  * list - List all worktrees with status
  */
 
+import { basename, dirname, join } from 'node:path'
 import { Command } from 'commander'
 import pc from 'picocolors'
-import { createSpinner } from '../utils/spinner.js'
-import { basename, dirname, join } from 'node:path'
 import {
-  listWorktrees,
-  getRepoName,
-  getDefaultBranch,
-  getCreationTime,
-  hasUncommittedChanges,
   getAheadBehind,
-  isPathInWorktree,
+  getCreationTime,
+  getDefaultBranch,
   getRemoteUrl,
+  getRepoName,
+  hasUncommittedChanges,
+  isPathInWorktree,
+  listWorktrees,
 } from '../utils/git.js'
-import { getPRStatus, parseGitHubRepo, isGhCliAvailable } from '../utils/github.js'
+import { getPRStatus, isGhCliAvailable, parseGitHubRepo } from '../utils/github.js'
+import { createSpinner } from '../utils/spinner.js'
 
 interface WorktreeInfo {
   path: string

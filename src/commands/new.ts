@@ -3,8 +3,8 @@
  */
 
 import { Command } from 'commander'
-import chalk from 'chalk'
-import ora from 'ora'
+import pc from 'picocolors'
+import { createSpinner } from '../utils/spinner.js'
 import { join, dirname, basename } from 'node:path'
 import {
   getMainWorktreePath,
@@ -31,11 +31,11 @@ export function newCommand() {
     .argument('<branch-name>', 'Name of the branch to create worktree for')
     .argument('[base-branch]', 'Base branch to create from (default: auto-detected)')
     .action(async (branchName: string, baseBranch?: string) => {
-      const spinner = ora()
+      const spinner = createSpinner()
       try {
         // Check if branch already exists
         if (await branchExists(branchName)) {
-          console.error(chalk.red(`Error: Branch '${branchName}' already exists locally`))
+          console.error(pc.red(`Error: Branch '${branchName}' already exists locally`))
           process.exit(1)
         }
 
@@ -78,7 +78,7 @@ export function newCommand() {
           await fetchOrigin()
         } catch {
           spinner.stop()
-          console.log(chalk.yellow(`⚠ Warning: Could not fetch from origin, using local '${base}'`))
+          console.log(pc.yellow(`⚠ Warning: Could not fetch from origin, using local '${base}'`))
           spinner.start('Creating worktree...')
           useRemoteBase = false
         }
@@ -90,7 +90,7 @@ export function newCommand() {
         const actualBase = useRemoteBase ? `origin/${base}` : base
         await createWorktree(branchName, worktreePath, actualBase)
         spinner.stop()
-        console.log(chalk.green(`✓ Created worktree for branch '${branchName}'`))
+        console.log(pc.green(`✓ Created worktree for branch '${branchName}'`))
 
         // Copy/symlink files based on config
         if (config.copy.length > 0 || config.symlink.length > 0) {
@@ -102,13 +102,13 @@ export function newCommand() {
           })
 
           if (result.copied.length > 0) {
-            console.log(chalk.gray(`  Copied ${result.copied.length} file(s) from main worktree`))
+            console.log(pc.gray(`  Copied ${result.copied.length} file(s) from main worktree`))
           }
           if (result.symlinked.length > 0) {
-            console.log(chalk.gray(`  Symlinked ${result.symlinked.length} file(s) from main worktree`))
+            console.log(pc.gray(`  Symlinked ${result.symlinked.length} file(s) from main worktree`))
           }
           for (const warning of result.warnings) {
-            console.log(chalk.yellow(`  ⚠ ${warning}`))
+            console.log(pc.yellow(`  ⚠ ${warning}`))
           }
         }
 
@@ -121,14 +121,14 @@ export function newCommand() {
             worktreePath,
             commands: resolvedCommands,
             onCommand: (command) => {
-              console.log(chalk.blue(`→ ${command}`))
+              console.log(pc.blue(`→ ${command}`))
             },
           })
 
           if (result.failed) {
-            console.log(chalk.yellow(`⚠ Command failed: ${result.failed.error}`))
+            console.log(pc.yellow(`⚠ Command failed: ${result.failed.error}`))
           } else if (result.executed.length > 0) {
-            console.log(chalk.green('✓ Post-create commands completed'))
+            console.log(pc.green('✓ Post-create commands completed'))
           }
         }
 
@@ -136,16 +136,16 @@ export function newCommand() {
         console.log()
         const copied = await copyToClipboard(worktreePath)
         if (copied) {
-          console.log(chalk.cyan(`cd ${worktreePath}`), chalk.gray('(path copied to clipboard)'))
+          console.log(pc.cyan(`cd ${worktreePath}`), pc.gray('(path copied to clipboard)'))
         } else {
-          console.log(chalk.cyan(`cd ${worktreePath}`))
+          console.log(pc.cyan(`cd ${worktreePath}`))
         }
       } catch (error) {
         spinner.stop()
         if (error instanceof Error) {
-          console.error(chalk.red(`Error: ${error.message}`))
+          console.error(pc.red(`Error: ${error.message}`))
         } else {
-          console.error(chalk.red('An unknown error occurred'))
+          console.error(pc.red('An unknown error occurred'))
         }
         process.exit(1)
       }

@@ -3,9 +3,9 @@
  */
 
 import { Command } from 'commander'
-import chalk from 'chalk'
-import ora from 'ora'
-import { select } from '@inquirer/prompts'
+import pc from 'picocolors'
+import { select } from '@clack/prompts'
+import { createSpinner } from '../utils/spinner.js'
 import { basename, dirname, join } from 'node:path'
 import {
   listWorktrees,
@@ -36,7 +36,8 @@ export function removeCommand() {
           force?: boolean
         },
       ) => {
-        const spinner = ora('Finding worktree...').start()
+        const spinner = createSpinner()
+        spinner.start('Finding worktree...')
 
         try {
           // Get repo info
@@ -50,7 +51,7 @@ export function removeCommand() {
 
           if (filteredWorktrees.length === 0) {
             spinner.stop()
-            console.log(chalk.yellow(`No worktrees found in ${worktreesDir}`))
+            console.log(pc.yellow(`No worktrees found in ${worktreesDir}`))
             return
           }
 
@@ -64,9 +65,9 @@ export function removeCommand() {
 
           if (!matchedWorktree) {
             spinner.stop()
-            console.error(chalk.red(`Error: No worktree found matching '${name}'`))
+            console.error(pc.red(`Error: No worktree found matching '${name}'`))
             console.log(
-              chalk.gray(`\nRun 'wt list' to see available worktrees`),
+              pc.gray(`\nRun 'wt list' to see available worktrees`),
             )
             process.exit(1)
           }
@@ -92,20 +93,20 @@ export function removeCommand() {
           spinner.stop()
 
           // Display worktree info
-          console.log(chalk.bold(`Worktree: ${worktreeDirname}`))
-          console.log(chalk.gray(`  Path: ${worktreePath}`))
-          console.log(chalk.gray(`  Branch: ${branch}`))
+          console.log(pc.bold(`Worktree: ${worktreeDirname}`))
+          console.log(pc.gray(`  Path: ${worktreePath}`))
+          console.log(pc.gray(`  Branch: ${branch}`))
           console.log()
 
           // Handle uncommitted changes interactively (unless --force)
           if (uncommitted && !options.force) {
             const changes = await getWorktreeChanges(worktreePath)
 
-            console.log(chalk.yellow('⚠ Uncommitted changes detected:'))
+            console.log(pc.yellow('⚠ Uncommitted changes detected:'))
             console.log()
 
             if (changes.modified.length > 0) {
-              console.log(chalk.bold('Modified:'))
+              console.log(pc.bold('Modified:'))
               for (const line of changes.modified) {
                 console.log(`  ${line}`)
               }
@@ -113,7 +114,7 @@ export function removeCommand() {
             }
 
             if (changes.untracked.length > 0) {
-              console.log(chalk.bold('Untracked:'))
+              console.log(pc.bold('Untracked:'))
               for (const line of changes.untracked) {
                 console.log(`  ${line}`)
               }
@@ -125,24 +126,29 @@ export function removeCommand() {
             let shouldRemove = false
 
             while (!shouldRemove) {
-              const choices = showedDiff
+              const options = showedDiff
                 ? [
-                    { name: 'Discard changes and remove', value: 'remove' as const },
-                    { name: 'Abort', value: 'abort' as const },
+                    { label: 'Discard changes and remove', value: 'remove' as const },
+                    { label: 'Abort', value: 'abort' as const },
                   ]
                 : [
-                    { name: 'Show diff', value: 'diff' as const },
-                    { name: 'Discard changes and remove', value: 'remove' as const },
-                    { name: 'Abort', value: 'abort' as const },
+                    { label: 'Show diff', value: 'diff' as const },
+                    { label: 'Discard changes and remove', value: 'remove' as const },
+                    { label: 'Abort', value: 'abort' as const },
                   ]
 
               const action = await select({
                 message: 'What would you like to do?',
-                choices,
+                options,
               })
 
+              if (typeof action === 'symbol') {
+                console.log(pc.yellow('Aborted.'))
+                return
+              }
+
               if (action === 'abort') {
-                console.log(chalk.yellow('Aborted.'))
+                console.log(pc.yellow('Aborted.'))
                 return
               }
 
@@ -153,7 +159,7 @@ export function removeCommand() {
                 if (diff) {
                   console.log(diff)
                 } else {
-                  console.log(chalk.gray('No diff available (only untracked files)'))
+                  console.log(pc.gray('No diff available (only untracked files)'))
                 }
                 console.log('─'.repeat(60))
                 console.log()
@@ -170,22 +176,27 @@ export function removeCommand() {
           // Show warnings for unpushed commits (unless --force)
           if ((hasUnpushed || noRemote) && !options.keepBranch && !options.force) {
             if (hasUnpushed) {
-              console.log(chalk.yellow(`⚠ Warning: Branch '${branch}' has unpushed commits`))
+              console.log(pc.yellow(`⚠ Warning: Branch '${branch}' has unpushed commits`))
             } else {
-              console.log(chalk.yellow(`⚠ Warning: Branch '${branch}' has no remote tracking branch`))
+              console.log(pc.yellow(`⚠ Warning: Branch '${branch}' has no remote tracking branch`))
             }
 
             const action = await select({
               message: 'What would you like to do?',
-              choices: [
-                { name: 'Delete branch anyway', value: 'delete' as const },
-                { name: 'Keep branch (only remove worktree)', value: 'keep' as const },
-                { name: 'Abort', value: 'abort' as const },
+              options: [
+                { label: 'Delete branch anyway', value: 'delete' as const },
+                { label: 'Keep branch (only remove worktree)', value: 'keep' as const },
+                { label: 'Abort', value: 'abort' as const },
               ],
             })
 
+            if (typeof action === 'symbol') {
+              console.log(pc.yellow('Aborted.'))
+              return
+            }
+
             if (action === 'abort') {
-              console.log(chalk.yellow('Aborted.'))
+              console.log(pc.yellow('Aborted.'))
               return
             }
 
@@ -197,20 +208,19 @@ export function removeCommand() {
           // Show warnings if forcing
           if (options.force) {
             if (uncommitted) {
-              console.log(chalk.yellow(`⚠ Warning: Removing worktree with uncommitted changes`))
+              console.log(pc.yellow(`⚠ Warning: Removing worktree with uncommitted changes`))
             }
             if (hasUnpushed && !options.keepBranch) {
-              console.log(chalk.yellow(`⚠ Warning: Deleting branch with unpushed commits`))
+              console.log(pc.yellow(`⚠ Warning: Deleting branch with unpushed commits`))
             }
             if (noRemote && !options.keepBranch) {
-              console.log(chalk.yellow(`⚠ Warning: Deleting branch with no remote tracking`))
+              console.log(pc.yellow(`⚠ Warning: Deleting branch with no remote tracking`))
             }
           }
 
           // Remove worktree
           console.log()
-          spinner.text = 'Removing worktree...'
-          spinner.start()
+          spinner.start('Removing worktree...')
 
           try {
             await removeWorktree(worktreePath, true)
@@ -222,31 +232,31 @@ export function removeCommand() {
           }
 
           spinner.stop()
-          console.log(chalk.green(`✓ Removed worktree: ${worktreeDirname}`))
+          console.log(pc.green(`✓ Removed worktree: ${worktreeDirname}`))
 
           // Delete branch by default (unless --keep-branch)
           if (!options.keepBranch && branch && branch !== 'unknown') {
             try {
               await deleteBranch(branch, true)
-              console.log(chalk.green(`✓ Deleted branch: ${branch}`))
+              console.log(pc.green(`✓ Deleted branch: ${branch}`))
             } catch (error) {
-              console.log(chalk.yellow(`⚠ Could not delete branch: ${branch}`))
+              console.log(pc.yellow(`⚠ Could not delete branch: ${branch}`))
               if (error instanceof Error) {
-                console.log(chalk.gray(`  ${error.message}`))
+                console.log(pc.gray(`  ${error.message}`))
               }
             }
           } else if (options.keepBranch) {
-            console.log(chalk.gray(`Branch '${branch}' kept`))
+            console.log(pc.gray(`Branch '${branch}' kept`))
           }
 
           console.log()
-          console.log(chalk.gray("Run 'wt list' to see remaining worktrees"))
+          console.log(pc.gray("Run 'wt list' to see remaining worktrees"))
         } catch (error) {
           spinner.stop()
           if (error instanceof Error) {
-            console.error(chalk.red(`Error: ${error.message}`))
+            console.error(pc.red(`Error: ${error.message}`))
           } else {
-            console.error(chalk.red('An unknown error occurred'))
+            console.error(pc.red('An unknown error occurred'))
           }
           process.exit(1)
         }

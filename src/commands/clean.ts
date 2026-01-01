@@ -3,9 +3,9 @@
  */
 
 import { Command } from 'commander'
-import chalk from 'chalk'
-import ora from 'ora'
-import { checkbox } from '@inquirer/prompts'
+import pc from 'picocolors'
+import { multiselect } from '@clack/prompts'
+import { createSpinner } from '../utils/spinner.js'
 import { basename, dirname, join } from 'node:path'
 import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs'
 import { execa } from 'execa'
@@ -164,17 +164,17 @@ export function cleanCommand() {
         dryRun?: boolean
         force?: boolean
       }) => {
-        const spinner = ora()
+        const spinner = createSpinner()
         try {
           // Check gh CLI availability
           const ghStatus = await isGhCliAvailable()
           if (!ghStatus.available) {
-            console.error(chalk.red("Error: 'gh' CLI is required for wt clean"))
+            console.error(pc.red("Error: 'gh' CLI is required for wt clean"))
             console.log('Install it with: brew install gh')
             process.exit(1)
           }
           if (!ghStatus.authenticated) {
-            console.error(chalk.red('Error: gh CLI is not authenticated'))
+            console.error(pc.red('Error: gh CLI is not authenticated'))
             console.log('Authenticate with: gh auth login')
             process.exit(1)
           }
@@ -193,11 +193,11 @@ export function cleanCommand() {
             githubInfo = parseGitHubRepo(remoteUrl)
 
             if (!githubInfo) {
-              console.error(chalk.red('Error: Not a GitHub repository'))
+              console.error(pc.red('Error: Not a GitHub repository'))
               process.exit(1)
             }
           } catch {
-            console.error(chalk.red('Error: No remote repository configured'))
+            console.error(pc.red('Error: No remote repository configured'))
             process.exit(1)
           }
 
@@ -208,7 +208,7 @@ export function cleanCommand() {
 
           if (filteredWorktrees.length === 0) {
             spinner.stop()
-            console.log(chalk.yellow(`No worktrees found in ${worktreesDir}`))
+            console.log(pc.yellow(`No worktrees found in ${worktreesDir}`))
             return
           }
 
@@ -264,7 +264,7 @@ export function cleanCommand() {
           spinner.stop()
 
           if (cleanable.length === 0 && abandonedFolders.length === 0 && orphanWorktrees.length === 0) {
-            console.log(chalk.green('✓ No merged/closed worktrees, abandoned folders, or orphan worktrees found'))
+            console.log(pc.green('✓ No merged/closed worktrees, abandoned folders, or orphan worktrees found'))
             return
           }
 
@@ -276,7 +276,7 @@ export function cleanCommand() {
           const choices: { name: string; value: ChoiceValue; checked: boolean }[] = []
 
           for (const wt of toRemove) {
-            const stateLabel = wt.prState === 'merged' ? chalk.green('MERGED') : chalk.yellow('CLOSED')
+            const stateLabel = wt.prState === 'merged' ? pc.green('MERGED') : pc.yellow('CLOSED')
             choices.push({
               name: `${wt.dirname} (${stateLabel})`,
               value: { type: 'worktree', data: wt },
@@ -286,7 +286,7 @@ export function cleanCommand() {
 
           for (const folder of abandonedFolders) {
             choices.push({
-              name: `${folder.dirname} ${chalk.gray('(abandoned)')}`,
+              name: `${folder.dirname} ${pc.gray('(abandoned)')}`,
               value: { type: 'abandoned', data: folder },
               checked: false,
             })
@@ -294,7 +294,7 @@ export function cleanCommand() {
 
           for (const orphan of orphanWorktrees) {
             choices.push({
-              name: `${orphan.dirname} ${chalk.hex('#FFA500')('(orphan)')}`,
+              name: `${orphan.dirname} ${pc.yellow('(orphan)')}`,
               value: { type: 'orphan', data: orphan },
               checked: false,
             })
@@ -302,7 +302,7 @@ export function cleanCommand() {
 
           // Show skipped worktrees
           if (skipped.length > 0) {
-            console.log(chalk.yellow('⚠ Skipped (uncommitted changes):'))
+            console.log(pc.yellow('⚠ Skipped (uncommitted changes):'))
             for (const wt of skipped) {
               console.log(`  ${wt.dirname} (${wt.branch})`)
             }
@@ -310,13 +310,13 @@ export function cleanCommand() {
           }
 
           if (choices.length === 0) {
-            console.log(chalk.yellow('No worktrees can be removed (all have uncommitted changes)'))
+            console.log(pc.yellow('No worktrees can be removed (all have uncommitted changes)'))
             return
           }
 
           // Dry run mode
           if (options.dryRun) {
-            console.log(chalk.bold('Would remove:'))
+            console.log(pc.bold('Would remove:'))
             for (const choice of choices) {
               console.log(`  ${choice.name}`)
             }
@@ -328,14 +328,23 @@ export function cleanCommand() {
           if (options.force) {
             selectedItems = choices.map(c => c.value)
           } else {
-            selectedItems = await checkbox({
+            const result = await multiselect({
               message: 'Select worktrees to remove:',
-              choices,
+              options: choices.map(c => ({
+                label: c.name,
+                value: c.value,
+              })),
             })
+
+            if (typeof result === 'symbol') {
+              // User cancelled
+              return
+            }
+            selectedItems = result as ChoiceValue[]
           }
 
           if (selectedItems.length === 0) {
-            console.log(chalk.yellow('No worktrees selected'))
+            console.log(pc.yellow('No worktrees selected'))
             return
           }
 
@@ -349,7 +358,7 @@ export function cleanCommand() {
           let orphanRemoved = 0
           let orphanFailed = 0
 
-          const removeSpinner = ora()
+          const removeSpinner = createSpinner()
 
           for (const item of selectedItems) {
             if (item.type === 'worktree') {
@@ -361,13 +370,13 @@ export function cleanCommand() {
                   await deleteBranch(wt.branch, true)
                   removeSpinner.succeed(`Removed: ${wt.dirname} (branch deleted)`)
                 } catch {
-                  removeSpinner.succeed(`Removed: ${wt.dirname}` + chalk.yellow(` (branch kept)`))
+                  removeSpinner.succeed(`Removed: ${wt.dirname}` + pc.yellow(` (branch kept)`))
                 }
                 removed++
               } catch (error) {
                 removeSpinner.fail(`Failed to remove: ${wt.dirname}`)
                 if (error instanceof Error) {
-                  console.log(chalk.red(`  ${error.message}`))
+                  console.log(pc.red(`  ${error.message}`))
                 }
                 failed++
               }
@@ -381,7 +390,7 @@ export function cleanCommand() {
               } catch (error) {
                 removeSpinner.fail(`Failed to remove: ${folder.dirname}`)
                 if (error instanceof Error) {
-                  console.log(chalk.red(`  ${error.message}`))
+                  console.log(pc.red(`  ${error.message}`))
                 }
                 abandonedFailed++
               }
@@ -395,7 +404,7 @@ export function cleanCommand() {
               } catch (error) {
                 removeSpinner.fail(`Failed to remove: ${orphan.dirname}`)
                 if (error instanceof Error) {
-                  console.log(chalk.red(`  ${error.message}`))
+                  console.log(pc.red(`  ${error.message}`))
                 }
                 orphanFailed++
               }
@@ -410,19 +419,19 @@ export function cleanCommand() {
           const totalRemoved = removed + foldersRemoved
 
           if (removed > 0 && foldersRemoved > 0) {
-            console.log(chalk.green(`✓ Cleaned up ${removed} worktree(s) and ${foldersRemoved} folder(s)!`))
+            console.log(pc.green(`✓ Cleaned up ${removed} worktree(s) and ${foldersRemoved} folder(s)!`))
           } else if (removed > 0) {
-            console.log(chalk.green(`✓ Cleaned up ${removed} worktree(s)!`))
+            console.log(pc.green(`✓ Cleaned up ${removed} worktree(s)!`))
           } else if (foldersRemoved > 0) {
-            console.log(chalk.green(`✓ Cleaned up ${foldersRemoved} folder(s)!`))
+            console.log(pc.green(`✓ Cleaned up ${foldersRemoved} folder(s)!`))
           }
 
           if (failed > 0 && foldersFailed > 0) {
-            console.log(chalk.red(`✗ Failed to remove ${failed} worktree(s) and ${foldersFailed} folder(s)`))
+            console.log(pc.red(`✗ Failed to remove ${failed} worktree(s) and ${foldersFailed} folder(s)`))
           } else if (failed > 0) {
-            console.log(chalk.red(`✗ Failed to remove ${failed} worktree(s)`))
+            console.log(pc.red(`✗ Failed to remove ${failed} worktree(s)`))
           } else if (foldersFailed > 0) {
-            console.log(chalk.red(`✗ Failed to remove ${foldersFailed} folder(s)`))
+            console.log(pc.red(`✗ Failed to remove ${foldersFailed} folder(s)`))
           }
 
           if (totalRemoved > 0) {
@@ -431,9 +440,9 @@ export function cleanCommand() {
         } catch (error) {
           spinner.stop()
           if (error instanceof Error) {
-            console.error(chalk.red(`Error: ${error.message}`))
+            console.error(pc.red(`Error: ${error.message}`))
           } else {
-            console.error(chalk.red('An unknown error occurred'))
+            console.error(pc.red('An unknown error occurred'))
           }
           process.exit(1)
         }

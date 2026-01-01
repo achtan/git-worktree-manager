@@ -7,8 +7,35 @@
 import { readFile, copyFile, symlink, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { spawn } from 'node:child_process'
-import { globby } from 'globby'
 import { z } from 'zod'
+
+/**
+ * Expand glob patterns with negation support
+ * Patterns starting with ! are negations
+ */
+async function expandGlobs(patterns: string[], cwd: string): Promise<string[]> {
+  const positive = patterns.filter(p => !p.startsWith('!'))
+  const negative = patterns.filter(p => p.startsWith('!')).map(p => p.slice(1))
+
+  const results: string[] = []
+  for (const pattern of positive) {
+    const glob = new Bun.Glob(pattern)
+    for await (const file of glob.scan({ cwd, dot: true })) {
+      results.push(file)
+    }
+  }
+
+  // Dedupe
+  const unique = [...new Set(results)]
+
+  // Filter out negated patterns
+  if (negative.length === 0) return unique
+
+  const negativeGlobs = negative.map(p => new Bun.Glob(p))
+  return unique.filter(file =>
+    !negativeGlobs.some(glob => glob.match(file))
+  )
+}
 
 /**
  * Zod schema for .wtrc.json validation
@@ -197,11 +224,7 @@ export async function copyConfigFiles(options: CopyConfigFilesOptions): Promise<
   // Process copy patterns
   if (copyPatterns.length > 0) {
     try {
-      const filesToCopy = await globby(copyPatterns, {
-        cwd: mainWorktreePath,
-        dot: true,
-        onlyFiles: true,
-      })
+      const filesToCopy = await expandGlobs(copyPatterns, mainWorktreePath)
 
       for (const file of filesToCopy) {
         const sourcePath = join(mainWorktreePath, file)
@@ -223,11 +246,7 @@ export async function copyConfigFiles(options: CopyConfigFilesOptions): Promise<
   // Process symlink patterns
   if (symlinkPatterns.length > 0) {
     try {
-      const filesToSymlink = await globby(symlinkPatterns, {
-        cwd: mainWorktreePath,
-        dot: true,
-        onlyFiles: true,
-      })
+      const filesToSymlink = await expandGlobs(symlinkPatterns, mainWorktreePath)
 
       for (const file of filesToSymlink) {
         const sourcePath = join(mainWorktreePath, file)

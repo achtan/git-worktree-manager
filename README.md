@@ -84,9 +84,8 @@ wt new feature/new-feature develop
 - Converts slashes in branch names to dashes for directory names (e.g., `feature/foo` → `feature-foo`)
 - Shows spinner during creation
 - Fails if branch already exists locally
-- Symlinks `.env` file from main worktree if present
-- Copies `.claude/settings.local.json` from main worktree if present
-- Copies WebStorm `.idea` settings from main worktree (run configurations, code styles, inspection profiles, scopes, and project files)
+- Copies/symlinks files based on `.wtrc.json` config (see [Configuration](#configuration))
+- Runs post-create commands from config
 - Copies worktree path to clipboard for easy navigation
 
 ### `wt list`
@@ -259,6 +258,82 @@ eval "$(wt init)"
 # Usage:
 wtl feature/my-feature
 ```
+
+## Configuration
+
+Create a `.wtrc.json` file in your repository root to configure worktree behavior:
+
+```json
+{
+  "worktreePath": "$REPO-worktrees/$DIR",
+  "copy": [
+    ".idea/runConfigurations/**",
+    ".idea/codeStyles/**",
+    "!.idea/workspace.xml"
+  ],
+  "symlink": [
+    ".env"
+  ],
+  "postCreate": [
+    "npm install",
+    "code $PATH &"
+  ]
+}
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `worktreePath` | string | `$REPO-worktrees/$DIR` | Path template for new worktrees (relative to parent of main repo) |
+| `copy` | string[] | `[]` | Glob patterns for files to copy from main worktree |
+| `symlink` | string[] | `[]` | Glob patterns for files to symlink from main worktree |
+| `postCreate` | string[] | `[]` | Commands to run after creating worktree |
+
+### Template Variables
+
+Use these variables in `worktreePath` and `postCreate` commands:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `$REPO` | Repository name | `my-repo` |
+| `$BRANCH` | Original branch name | `feature/auth` |
+| `$DIR` | Directory-safe branch name (slashes → dashes) | `feature-auth` |
+| `$PATH` | Full worktree path | `/path/to/my-repo-worktrees/feature-auth` |
+
+### Glob Patterns
+
+Copy and symlink patterns use gitignore-style globs:
+
+- `.env` - single file
+- `.idea/**` - entire directory
+- `!.idea/workspace.xml` - exclude specific file
+- `*.config.js` - wildcard matching
+
+### Post-Create Commands
+
+Commands run sequentially in the new worktree directory:
+
+- Commands ending with ` &` run detached (don't wait)
+- Other commands run blocking
+- Execution stops on first failure
+
+```json
+{
+  "postCreate": [
+    "npm install",
+    "code $PATH &"
+  ]
+}
+```
+
+### View Current Config
+
+```bash
+wt config
+```
+
+Shows the active configuration with resolved paths.
 
 ## GitHub Integration
 

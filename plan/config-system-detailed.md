@@ -50,10 +50,10 @@ function getDefaults(): WtConfig
    - Handles malformed JSON gracefully (returns defaults + warning)
 
 ### Implementation Status
-- [ ] `src/utils/config.ts` created
-- [ ] `loadConfig()` function implemented
-- [ ] `getDefaults()` function implemented
-- [ ] Validation criteria verified
+- [x] `src/utils/config.ts` created
+- [x] `loadConfig()` function implemented
+- [x] `getDefaults()` function implemented
+- [x] Validation criteria verified
 
 ---
 
@@ -91,10 +91,10 @@ function resolveConfig(config: WtConfig, vars: TemplateVariables): WtConfig
 2. Verify edge cases: no variables, unknown variables left as-is
 
 ### Implementation Status
-- [ ] `TemplateVariables` interface added
-- [ ] `resolveTemplate()` function implemented
-- [ ] `resolveConfig()` function implemented
-- [ ] Validation criteria verified
+- [x] `TemplateVariables` interface added
+- [x] `resolveTemplate()` function implemented
+- [x] `resolveConfig()` function implemented
+- [x] Validation criteria verified
 
 ---
 
@@ -152,11 +152,11 @@ async function copyConfigFiles(options: {
    - Permission errors logged as warnings
 
 ### Implementation Status
-- [ ] `globby` package added to dependencies
-- [ ] `copyConfigFiles()` function implemented
-- [ ] Copy logic with directory preservation working
-- [ ] Symlink logic working
-- [ ] Validation criteria verified
+- [x] `globby` package added to dependencies
+- [x] `copyConfigFiles()` function implemented
+- [x] Copy logic with directory preservation working
+- [x] Symlink logic working
+- [x] Validation criteria verified
 
 ---
 
@@ -229,11 +229,11 @@ for (const command of commands) {
    - Process exits cleanly
 
 ### Implementation Status
-- [ ] `runPostCreateCommands()` function implemented
-- [ ] Blocking command execution working
-- [ ] Detached command execution (` &` suffix) working
-- [ ] Template variable resolution in commands working
-- [ ] Validation criteria verified
+- [x] `runPostCreateCommands()` function implemented
+- [x] Blocking command execution working
+- [x] Detached command execution (` &` suffix) working
+- [x] Template variable resolution in commands working
+- [x] Validation criteria verified
 
 ---
 
@@ -283,10 +283,10 @@ postCreate:
 3. Output is readable and shows both template and resolved values
 
 ### Implementation Status
-- [ ] `src/commands/config.ts` created
-- [ ] Command registered in `src/cli.ts`
-- [ ] Config display formatting implemented
-- [ ] Validation criteria verified
+- [x] `src/commands/config.ts` created
+- [x] Command registered in `src/cli.ts`
+- [x] Config display formatting implemented
+- [x] Validation criteria verified
 
 ---
 
@@ -309,11 +309,11 @@ postCreate:
 3. No references to old patterns remain
 
 ### Implementation Status
-- [ ] Hardcoded `.env` symlink logic removed
-- [ ] Hardcoded `.claude/settings.local.json` copy removed
-- [ ] Hardcoded `.idea` copy logic removed
-- [ ] `post-worktree-created` hook support removed
-- [ ] Validation criteria verified
+- [x] Hardcoded `.env` symlink logic removed
+- [x] Hardcoded `.claude/settings.local.json` copy removed
+- [x] Hardcoded `.idea` copy logic removed
+- [x] `post-worktree-created` hook support removed
+- [x] Validation criteria verified
 
 ---
 
@@ -338,10 +338,79 @@ postCreate:
 3. Copy example, rename to `.wtrc.json`, verify it works
 
 ### Implementation Status
-- [ ] README.md updated with config section
-- [ ] `.wtrc.example.json` created
-- [ ] Template variables documented
-- [ ] Validation criteria verified
+- [x] README.md updated with config section
+- [x] `.wtrc.example.json` created
+- [x] Template variables documented
+- [x] Validation criteria verified
+
+---
+
+## Phase 8: Zod Schema Validation
+
+**Goal:** Add strict schema validation using Zod. Commands fail if config file exists but is invalid.
+
+### Dependencies
+- Add `zod` package
+
+### Files to Modify
+- `package.json` - add zod dependency
+- `src/utils/config.ts` - add Zod schema and validation
+- `src/commands/config.ts` - handle validation errors
+- `src/commands/new.ts` - handle validation errors
+
+### Implementation Details
+
+```typescript
+import { z } from 'zod'
+
+const WtConfigSchema = z.object({
+  worktreePath: z.string().optional(),
+  copy: z.array(z.string()).optional(),
+  symlink: z.array(z.string()).optional(),
+  postCreate: z.array(z.string()).optional(),
+})
+
+class ConfigValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly configPath: string,
+    public readonly zodError?: z.ZodError
+  ) {
+    super(message)
+    this.name = 'ConfigValidationError'
+  }
+}
+```
+
+**Behavior:**
+- No config file → return defaults (silent)
+- Valid config file → return parsed config
+- Invalid JSON → throw `ConfigValidationError` with parse error
+- Schema validation fails → throw `ConfigValidationError` with field-level errors
+- Commands exit with code 1 on validation errors
+
+**Error Output Example:**
+```
+Error: Invalid .wtrc.json:
+  - copy: Invalid input: expected array, received string
+  - symlink: Invalid input: expected array, received number
+```
+
+### Validation Criteria
+1. `wt config` with no config file → shows defaults
+2. `wt config` with valid config → shows config
+3. `wt config` with invalid JSON → exits 1 with JSON error
+4. `wt config` with schema errors → exits 1 with field errors
+5. `wt new` with invalid config → exits 1 before creating worktree
+
+### Implementation Status
+- [x] `zod` package added to dependencies
+- [x] `WtConfigSchema` Zod schema created
+- [x] `ConfigValidationError` class implemented
+- [x] `loadConfig()` throws on invalid config
+- [x] `wt config` displays errors and exits 1
+- [x] `wt new` fails on invalid config
+- [x] Validation criteria verified
 
 ---
 

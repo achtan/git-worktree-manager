@@ -6,9 +6,6 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { join, dirname, basename } from 'node:path'
-import { symlink, copyFile, mkdir, readFile, cp, readdir } from 'node:fs/promises'
-import { existsSync, statSync } from 'node:fs'
-import { execa } from 'execa'
 import {
   getMainWorktreePath,
   getDefaultBranch,
@@ -18,6 +15,13 @@ import {
   fetchOrigin,
 } from '../utils/git.js'
 import { copyToClipboard } from '../utils/clipboard.js'
+import {
+  loadConfig,
+  resolveTemplate,
+  copyConfigFiles,
+  runPostCreateCommands,
+  type TemplateVariables,
+} from '../utils/config.js'
 
 export function newCommand() {
   const cmd = new Command('new')
@@ -42,12 +46,27 @@ export function newCommand() {
         const mainWorktreePath = await getMainWorktreePath()
         const repoName = basename(mainWorktreePath)
 
-        // Construct worktree directory path (absolute, based on main worktree)
-        const worktreeBaseDir = join(dirname(mainWorktreePath), `${repoName}-worktrees`)
+        // Load config from .wtrc.json (throws if config exists but is invalid)
+        const { config } = await loadConfig(mainWorktreePath)
 
         // Convert branch name slashes to dashes for directory name
         const dirName = branchName.replace(/\//g, '-')
-        const worktreePath = join(worktreeBaseDir, dirName)
+
+        // Build template variables
+        const templateVars: TemplateVariables = {
+          PATH: '', // Will be set after worktreePath is resolved
+          BRANCH: branchName,
+          DIR: dirName,
+          REPO: repoName,
+        }
+
+        // Resolve worktree path from config template
+        const resolvedWorktreePath = resolveTemplate(config.worktreePath, templateVars)
+        const worktreePath = join(dirname(mainWorktreePath), resolvedWorktreePath)
+        const worktreeBaseDir = dirname(worktreePath)
+
+        // Update PATH variable now that we have the full path
+        templateVars.PATH = worktreePath
 
         // Get base branch (use provided or auto-detect)
         const base = baseBranch || (await getDefaultBranch())
@@ -73,107 +92,44 @@ export function newCommand() {
         spinner.stop()
         console.log(chalk.green(`✓ Created worktree for branch '${branchName}'`))
 
-        // Copy files from main worktree
-        try {
-          const mainRoot = mainWorktreePath
+        // Copy/symlink files based on config
+        if (config.copy.length > 0 || config.symlink.length > 0) {
+          const result = await copyConfigFiles({
+            mainWorktreePath,
+            worktreePath,
+            copyPatterns: config.copy,
+            symlinkPatterns: config.symlink,
+          })
 
-          // Symlink .env file
-          const sourceEnvPath = join(mainRoot, '.env')
-          const targetEnvPath = join(worktreePath, '.env')
-
-          if (existsSync(sourceEnvPath)) {
-            await symlink(sourceEnvPath, targetEnvPath)
-            console.log(chalk.gray('  Symlinked .env from main worktree'))
+          if (result.copied.length > 0) {
+            console.log(chalk.gray(`  Copied ${result.copied.length} file(s) from main worktree`))
           }
-
-          // Copy .claude/settings.local.json file
-          const sourceSettingsPath = join(mainRoot, '.claude', 'settings.local.json')
-          const targetSettingsPath = join(worktreePath, '.claude', 'settings.local.json')
-
-          if (existsSync(sourceSettingsPath)) {
-            await mkdir(dirname(targetSettingsPath), { recursive: true })
-            await copyFile(sourceSettingsPath, targetSettingsPath)
-            console.log(chalk.gray('  Copied .claude/settings.local.json from main worktree'))
+          if (result.symlinked.length > 0) {
+            console.log(chalk.gray(`  Symlinked ${result.symlinked.length} file(s) from main worktree`))
           }
-
-          // Copy WebStorm .idea settings (whitelisted files only)
-          const sourceIdeaPath = join(mainRoot, '.idea')
-          const targetIdeaPath = join(worktreePath, '.idea')
-
-          if (existsSync(sourceIdeaPath)) {
-            let copiedAny = false
-
-            // Ensure target .idea directory exists
-            await mkdir(targetIdeaPath, { recursive: true })
-
-            // Whitelisted directories to copy
-            const dirsTocp = ['runConfigurations', 'codeStyles', 'inspectionProfiles', 'scopes']
-            for (const dir of dirsTocp) {
-              const sourceDir = join(sourceIdeaPath, dir)
-              const targetDir = join(targetIdeaPath, dir)
-              if (existsSync(sourceDir) && statSync(sourceDir).isDirectory()) {
-                await cp(sourceDir, targetDir, { recursive: true })
-                copiedAny = true
-              }
-            }
-
-            // Whitelisted files to copy
-            const filesToCopy = ['modules.xml', 'vcs.xml', 'encodings.xml', 'misc.xml']
-            for (const file of filesToCopy) {
-              const sourceFile = join(sourceIdeaPath, file)
-              const targetFile = join(targetIdeaPath, file)
-              if (existsSync(sourceFile)) {
-                await copyFile(sourceFile, targetFile)
-                copiedAny = true
-              }
-            }
-
-            // Copy all .iml files
-            const ideaFiles = await readdir(sourceIdeaPath)
-            for (const file of ideaFiles) {
-              if (file.endsWith('.iml')) {
-                const sourceFile = join(sourceIdeaPath, file)
-                const targetFile = join(targetIdeaPath, file)
-                if (existsSync(sourceFile)) {
-                  await copyFile(sourceFile, targetFile)
-                  copiedAny = true
-                }
-              }
-            }
-
-            if (copiedAny) {
-              console.log(chalk.gray('  Copied WebStorm settings from main worktree'))
-            }
+          for (const warning of result.warnings) {
+            console.log(chalk.yellow(`  ⚠ ${warning}`))
           }
-        } catch (error) {
-          // Silently skip if files don't exist or operations fail
         }
 
-        // Check for and execute post-worktree-created hook
-        try {
-          const packageJsonPath = join(worktreePath, 'package.json')
-          if (existsSync(packageJsonPath)) {
-            const packageJsonContent = await readFile(packageJsonPath, 'utf-8')
-            const packageJson = JSON.parse(packageJsonContent)
+        // Run post-create commands
+        if (config.postCreate.length > 0) {
+          // Resolve template variables in commands
+          const resolvedCommands = config.postCreate.map(cmd => resolveTemplate(cmd, templateVars))
 
-            const hookScript = packageJson.scripts?.['post-worktree-created']
-            if (hookScript) {
-              spinner.stop()
-              console.log(chalk.blue(`→ Running post-worktree-created: ${hookScript}`))
-              spinner.start('Executing hook...')
+          const result = await runPostCreateCommands({
+            worktreePath,
+            commands: resolvedCommands,
+            onCommand: (command) => {
+              console.log(chalk.blue(`→ ${command}`))
+            },
+          })
 
-              await execa('npm', ['run', 'post-worktree-created'], {
-                cwd: worktreePath,
-              })
-
-              spinner.stop()
-              console.log(chalk.green('✓ Post-worktree hook completed'))
-            }
+          if (result.failed) {
+            console.log(chalk.yellow(`⚠ Command failed: ${result.failed.error}`))
+          } else if (result.executed.length > 0) {
+            console.log(chalk.green('✓ Post-create commands completed'))
           }
-        } catch (error) {
-          spinner.stop()
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-          console.log(chalk.yellow(`⚠ Warning: Post-worktree hook failed: ${errorMessage}`))
         }
 
         // Print final cd command and copy path to clipboard

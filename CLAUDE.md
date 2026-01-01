@@ -6,26 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Build the project
-npm run build
+bun run build
 
 # Watch mode for development
-npm run dev
+bun run dev
 
 # Lint TypeScript files
-npm run lint
+bun run lint
 
 # Format code
-npm run format
+bun run format
 
 # Check formatting
-npm run format:check
+bun run format:check
 ```
 
 ## Testing the CLI
 
 ```bash
 # After building, test commands locally
-npm run build
+bun run build
 ./dist/cli.js new feature/test
 ./dist/cli.js list
 ./dist/cli.js clean
@@ -69,7 +69,7 @@ This is a Git worktree manager that creates worktrees in a `<repo>-worktrees/` d
 - Main worktree is identified as the first in `git worktree list` output
 
 **Error Handling**
-- Commands use spinners (ora) for long operations, stopped before error messages
+- Commands use spinners (@clack/prompts) for long operations, stopped before error messages
 - GitHub API errors fail gracefully (return null/default values)
 - Validation happens before spinners start to avoid spinner cleanup on early exits
 

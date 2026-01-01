@@ -1,6 +1,6 @@
 {
   "name": "wt-manager",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "CLI tool for managing Git worktrees efficiently with GitHub integration",
   "type": "module",
   "main": "dist/index.js",
@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/daviddurika/git-worktree-manager#readme",
   "scripts": {
+    "test": "bun test",
     "build": "bun build ./src/cli.ts --outdir=dist --target=bun",
     "build:binaries": "bun run scripts/build-binaries.ts",
     "dev": "bun --watch src/cli.ts",

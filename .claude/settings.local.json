@@ -9,7 +9,9 @@
       "Bash(npm run lint:*)",
       "Bash(git push:*)",
       "Bash(npm view:*)",
-      "WebFetch(domain:www.npmjs.com)"
+      "WebFetch(domain:www.npmjs.com)",
+      "WebSearch",
+      "Bash(./dist/cli.js:*)"
     ],
     "deny": [],
     "ask": []

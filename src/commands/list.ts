@@ -3,8 +3,8 @@
  */
 
 import { Command } from 'commander'
-import chalk from 'chalk'
-import ora from 'ora'
+import pc from 'picocolors'
+import { createSpinner } from '../utils/spinner.js'
 import { basename, dirname, join } from 'node:path'
 import {
   listWorktrees,
@@ -43,7 +43,8 @@ export function listCommand() {
     .description('List all worktrees with status')
     .option('--json', 'Output in JSON format')
     .action(async (options: { json?: boolean }) => {
-      const spinner = options.json ? null : ora('Gathering worktree information...').start()
+      const spinner = options.json ? null : createSpinner()
+      spinner?.start('Gathering worktree information...')
       try {
         // Get repo info
         const repoName = await getRepoName()
@@ -51,7 +52,7 @@ export function listCommand() {
 
         if (worktrees.length === 0) {
           spinner?.stop()
-          console.log(chalk.yellow('No worktrees found'))
+          console.log(pc.yellow('No worktrees found'))
           return
         }
 
@@ -64,7 +65,7 @@ export function listCommand() {
 
         if (filteredWorktrees.length === 0) {
           spinner?.stop()
-          console.log(chalk.yellow(`No worktrees found in ${worktreesDir}`))
+          console.log(pc.yellow(`No worktrees found in ${worktreesDir}`))
           return
         }
 
@@ -176,18 +177,18 @@ export function listCommand() {
         }
 
         // Display header
-        console.log(chalk.bold(`Worktrees for ${repoName}:`))
+        console.log(pc.bold(`Worktrees for ${repoName}:`))
         console.log('━'.repeat(60))
         console.log()
 
         // Display each worktree
         for (const info of worktreeInfos) {
           // Determine color based on PR status
-          let statusColor = chalk.gray
+          let statusColor = pc.gray
           if (info.prStatus?.state === 'open') {
-            statusColor = chalk.green
+            statusColor = pc.green
           } else if (info.prStatus?.state === 'merged' || info.prStatus?.state === 'closed') {
-            statusColor = chalk.magenta
+            statusColor = pc.magenta
           }
 
           // Build status line
@@ -195,34 +196,34 @@ export function listCommand() {
 
           // Add ahead/behind
           if (info.branch !== 'no-branch') {
-            statusLine += ` ${chalk.gray(`(↑${info.ahead} ↓${info.behind})`)}`
+            statusLine += ` ${pc.gray(`(↑${info.ahead} ↓${info.behind})`)}`
           }
 
           // Add uncommitted changes indicator
           if (info.hasUncommittedChanges) {
-            statusLine += ` ${chalk.yellow('(uncommitted changes)')}`
+            statusLine += ` ${pc.yellow('(uncommitted changes)')}`
           }
 
           // Add outdated warning
           if (info.behind > 10) {
-            statusLine += ` ${chalk.yellow('⚠️  outdated')}`
+            statusLine += ` ${pc.yellow('⚠️  outdated')}`
           }
 
           // Add checks status
           if (info.prStatus?.checksStatus === 'failure') {
-            statusLine += ` ${chalk.red('❌ checks failing')}`
+            statusLine += ` ${pc.red('❌ checks failing')}`
           }
 
           // Add current indicator
           if (info.isCurrentWorktree) {
-            statusLine += ` ${chalk.cyan('← you are here')}`
+            statusLine += ` ${pc.cyan('← you are here')}`
           }
 
           console.log(statusLine)
-          console.log(`  ${chalk.gray('Branch:')} ${info.branch}`)
+          console.log(`  ${pc.gray('Branch:')} ${info.branch}`)
 
           if (info.prStatus?.url) {
-            console.log(`  ${chalk.gray('PR:')} ${info.prStatus.url}`)
+            console.log(`  ${pc.gray('PR:')} ${info.prStatus.url}`)
           }
 
           console.log()
@@ -257,19 +258,19 @@ export function listCommand() {
         // Suggestions
         const cleanable = counts.merged + counts.closed
         if (cleanable > 0) {
-          console.log(chalk.blue(`💡 Run 'wt clean' to remove ${cleanable} merged/closed worktree(s)`))
+          console.log(pc.blue(`💡 Run 'wt clean' to remove ${cleanable} merged/closed worktree(s)`))
         }
 
         // Show specific message based on what failed
         if (githubError) {
           if (githubError === 'not-github') {
-            console.log(chalk.blue('💡 Not a GitHub repository - PR status unavailable'))
+            console.log(pc.blue('💡 Not a GitHub repository - PR status unavailable'))
           } else if (githubError === 'gh-unavailable') {
             const ghStatus = await isGhCliAvailable()
             if (!ghStatus.available) {
-              console.log(chalk.blue('💡 Install gh CLI for PR status: brew install gh'))
+              console.log(pc.blue('💡 Install gh CLI for PR status: brew install gh'))
             } else if (!ghStatus.authenticated) {
-              console.log(chalk.blue('💡 Authenticate gh CLI for PR status: gh auth login'))
+              console.log(pc.blue('💡 Authenticate gh CLI for PR status: gh auth login'))
             }
           }
           // No message for 'no-remote' - it's not relevant
@@ -277,9 +278,9 @@ export function listCommand() {
       } catch (error) {
         spinner?.stop()
         if (error instanceof Error) {
-          console.error(chalk.red(`Error: ${error.message}`))
+          console.error(pc.red(`Error: ${error.message}`))
         } else {
-          console.error(chalk.red('An unknown error occurred'))
+          console.error(pc.red('An unknown error occurred'))
         }
         process.exit(1)
       }

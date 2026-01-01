@@ -27,11 +27,11 @@ And when you're done? `wt clean` finds all merged/closed PRs and removes their w
 
 ## Quick Start
 
-**Requirements:** Node.js 22+, Git, and [GitHub CLI](https://cli.github.com/) (`gh auth login`)
+**Requirements:** Bun 1.0+, Git, and [GitHub CLI](https://cli.github.com/) (`gh auth login`)
 
 ```bash
 # Install globally
-npm install -g .
+bun install -g .
 
 # Create a new worktree
 wt feature/my-feature
@@ -358,25 +358,53 @@ wt clean
 # Removes merged worktree and deletes branch
 ```
 
+## Installation
+
+### Via bun
+
+```bash
+bun install -g wt-manager
+```
+
+### Standalone Binaries
+
+Download pre-built binaries from [GitHub Releases](https://github.com/daviddurika/git-worktree-manager/releases):
+
+| Platform | Binary |
+|----------|--------|
+| macOS ARM64 (M1/M2) | `wt-darwin-arm64` |
+| macOS x64 (Intel) | `wt-darwin-x64` |
+| Linux x64 | `wt-linux-x64` |
+| Linux ARM64 | `wt-linux-arm64` |
+| Windows x64 | `wt-windows-x64.exe` |
+
+```bash
+# Example: macOS ARM64
+curl -L https://github.com/daviddurika/git-worktree-manager/releases/latest/download/wt-darwin-arm64 -o ~/.local/bin/wt
+chmod +x ~/.local/bin/wt
+```
+
+Make sure `~/.local/bin` is in your PATH.
+
 ## Development
 
 ### Build
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### Watch Mode
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ### Linting
 
 ```bash
-npm run lint
-npm run format
+bun run lint
+bun run format
 ```
 
 ## License

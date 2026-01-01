@@ -4,11 +4,37 @@
  * Loads and parses .wtrc.json configuration file for worktree settings.
  */
 
-import { readFile, copyFile, symlink, mkdir } from 'node:fs/promises'
+import { symlink, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
-import { spawn } from 'node:child_process'
-import { globby } from 'globby'
 import { z } from 'zod'
+
+/**
+ * Expand glob patterns with negation support
+ * Patterns starting with ! are negations
+ */
+async function expandGlobs(patterns: string[], cwd: string): Promise<string[]> {
+  const positive = patterns.filter(p => !p.startsWith('!'))
+  const negative = patterns.filter(p => p.startsWith('!')).map(p => p.slice(1))
+
+  const results: string[] = []
+  for (const pattern of positive) {
+    const glob = new Bun.Glob(pattern)
+    for await (const file of glob.scan({ cwd, dot: true })) {
+      results.push(file)
+    }
+  }
+
+  // Dedupe
+  const unique = [...new Set(results)]
+
+  // Filter out negated patterns
+  if (negative.length === 0) return unique
+
+  const negativeGlobs = negative.map(p => new Bun.Glob(p))
+  return unique.filter(file =>
+    !negativeGlobs.some(glob => glob.match(file))
+  )
+}
 
 /**
  * Zod schema for .wtrc.json validation
@@ -62,7 +88,7 @@ export async function loadConfig(mainWorktreePath: string): Promise<LoadConfigRe
   const configPath = join(mainWorktreePath, CONFIG_FILENAME)
 
   try {
-    const content = await readFile(configPath, 'utf-8')
+    const content = await Bun.file(configPath).text()
     let parsed: unknown
 
     try {
@@ -197,11 +223,7 @@ export async function copyConfigFiles(options: CopyConfigFilesOptions): Promise<
   // Process copy patterns
   if (copyPatterns.length > 0) {
     try {
-      const filesToCopy = await globby(copyPatterns, {
-        cwd: mainWorktreePath,
-        dot: true,
-        onlyFiles: true,
-      })
+      const filesToCopy = await expandGlobs(copyPatterns, mainWorktreePath)
 
       for (const file of filesToCopy) {
         const sourcePath = join(mainWorktreePath, file)
@@ -209,7 +231,7 @@ export async function copyConfigFiles(options: CopyConfigFilesOptions): Promise<
 
         try {
           await mkdir(dirname(targetPath), { recursive: true })
-          await copyFile(sourcePath, targetPath)
+          await Bun.write(targetPath, Bun.file(sourcePath))
           copied.push(file)
         } catch (error) {
           warnings.push(`Failed to copy ${file}: ${(error as Error).message}`)
@@ -223,11 +245,7 @@ export async function copyConfigFiles(options: CopyConfigFilesOptions): Promise<
   // Process symlink patterns
   if (symlinkPatterns.length > 0) {
     try {
-      const filesToSymlink = await globby(symlinkPatterns, {
-        cwd: mainWorktreePath,
-        dot: true,
-        onlyFiles: true,
-      })
+      const filesToSymlink = await expandGlobs(symlinkPatterns, mainWorktreePath)
 
       for (const file of filesToSymlink) {
         const sourcePath = join(mainWorktreePath, file)
@@ -276,42 +294,30 @@ export async function runPostCreateCommands(options: RunPostCreateCommandsOption
     if (command.endsWith(' &')) {
       // Detached command - spawn and don't wait
       const cmd = command.slice(0, -2).trim()
-      spawn(cmd, {
+      Bun.spawn(['sh', '-c', cmd], {
         cwd: worktreePath,
-        shell: true,
-        detached: true,
-        stdio: 'ignore',
-      }).unref()
+        stdout: 'ignore',
+        stderr: 'ignore',
+        stdin: 'ignore',
+      })
       executed.push(command)
     } else {
       // Blocking command - wait for completion
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const child = spawn(command, {
-            cwd: worktreePath,
-            shell: true,
-            stdio: 'inherit',
-          })
+      const proc = Bun.spawn(['sh', '-c', command], {
+        cwd: worktreePath,
+        stdout: 'inherit',
+        stderr: 'inherit',
+        stdin: 'inherit',
+      })
 
-          child.on('close', (code) => {
-            if (code === 0) {
-              resolve()
-            } else {
-              reject(new Error(`Command exited with code ${code}`))
-            }
-          })
-
-          child.on('error', (error) => {
-            reject(error)
-          })
-        })
-        executed.push(command)
-      } catch (error) {
+      const exitCode = await proc.exited
+      if (exitCode !== 0) {
         return {
           executed,
-          failed: { command, error: (error as Error).message },
+          failed: { command, error: `Command exited with code ${exitCode}` },
         }
       }
+      executed.push(command)
     }
   }
 

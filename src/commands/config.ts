@@ -3,7 +3,7 @@
  */
 
 import { Command } from 'commander'
-import chalk from 'chalk'
+import pc from 'picocolors'
 import { join } from 'node:path'
 import { getMainWorktreePath, getRepoName } from '../utils/git.js'
 import { loadConfig } from '../utils/config.js'
@@ -20,57 +20,57 @@ export function configCommand() {
 
       // Show config file status
       if (source === 'defaults') {
-        console.log(chalk.gray('Config: No .wtrc.json found (using defaults)'))
+        console.log(pc.gray('Config: No .wtrc.json found (using defaults)'))
       } else {
-        console.log(chalk.gray(`Config: ${configPath}`))
+        console.log(pc.gray(`Config: ${configPath}`))
       }
 
       console.log()
 
       // Display worktreePath with example resolution
-      console.log(chalk.bold('worktreePath:'), config.worktreePath)
+      console.log(pc.bold('worktreePath:'), config.worktreePath)
       const exampleDir = config.worktreePath
         .replace(/\$REPO\b/g, repoName)
         .replace(/\$DIR\b/g, '<branch>')
-      console.log(chalk.gray(`             → ${exampleDir}`))
+      console.log(pc.gray(`             → ${exampleDir}`))
 
       // Display copy patterns
       console.log()
-      console.log(chalk.bold('copy:'))
+      console.log(pc.bold('copy:'))
       if (config.copy.length > 0) {
         for (const pattern of config.copy) {
           console.log(`  - ${pattern}`)
         }
       } else {
-        console.log(chalk.gray('  (none)'))
+        console.log(pc.gray('  (none)'))
       }
 
       // Display symlink patterns
       console.log()
-      console.log(chalk.bold('symlink:'))
+      console.log(pc.bold('symlink:'))
       if (config.symlink.length > 0) {
         for (const pattern of config.symlink) {
           console.log(`  - ${pattern}`)
         }
       } else {
-        console.log(chalk.gray('  (none)'))
+        console.log(pc.gray('  (none)'))
       }
 
       // Display postCreate commands
       console.log()
-      console.log(chalk.bold('postCreate:'))
+      console.log(pc.bold('postCreate:'))
       if (config.postCreate.length > 0) {
         for (const command of config.postCreate) {
           console.log(`  - ${command}`)
         }
       } else {
-        console.log(chalk.gray('  (none)'))
+        console.log(pc.gray('  (none)'))
       }
     } catch (error) {
       if (error instanceof Error) {
-        console.error(chalk.red(`Error: ${error.message}`))
+        console.error(pc.red(`Error: ${error.message}`))
       } else {
-        console.error(chalk.red('An unknown error occurred'))
+        console.error(pc.red('An unknown error occurred'))
       }
       process.exit(1)
     }

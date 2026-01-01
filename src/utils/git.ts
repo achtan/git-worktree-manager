@@ -4,8 +4,8 @@
  * Helper functions for executing Git commands using execa.
  */
 
-import { execa } from 'execa'
-import { mkdir, stat } from 'node:fs/promises'
+import { exec } from './exec.js'
+import { mkdir } from 'node:fs/promises'
 import { basename } from 'node:path'
 
 /**
@@ -25,7 +25,7 @@ export interface Worktree {
  * Works correctly even when called from within a worktree
  */
 export async function getMainWorktreePath(): Promise<string> {
-  const { stdout } = await execa('git', ['worktree', 'list'])
+  const { stdout } = await exec('git', ['worktree', 'list'])
   const firstLine = stdout.split('\n')[0]
   return firstLine.split(/\s+/)[0]
 }
@@ -45,7 +45,7 @@ export async function getRepoName(): Promise<string> {
  */
 export async function getDefaultBranch(): Promise<string> {
   try {
-    const { stdout } = await execa('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'])
+    const { stdout } = await exec('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'])
     return stdout.replace('refs/remotes/origin/', '')
   } catch {
     return 'develop'
@@ -56,14 +56,14 @@ export async function getDefaultBranch(): Promise<string> {
  * Fetch from origin
  */
 export async function fetchOrigin(): Promise<void> {
-  await execa('git', ['fetch', 'origin'])
+  await exec('git', ['fetch', 'origin'])
 }
 
 /**
  * Get list of all worktrees
  */
 export async function listWorktrees(): Promise<Worktree[]> {
-  const { stdout } = await execa('git', ['worktree', 'list', '--porcelain'])
+  const { stdout } = await exec('git', ['worktree', 'list', '--porcelain'])
   const worktrees: Worktree[] = []
 
   const lines = stdout.trim().split('\n')
@@ -117,7 +117,7 @@ export async function createWorktree(
   worktreePath: string,
   baseBranch: string,
 ): Promise<void> {
-  await execa('git', ['worktree', 'add', '-b', branchName, worktreePath, baseBranch])
+  await exec('git', ['worktree', 'add', '-b', branchName, worktreePath, baseBranch])
 }
 
 /**
@@ -128,7 +128,7 @@ export async function removeWorktree(path: string, force?: boolean): Promise<voi
   if (force) {
     args.push('--force')
   }
-  await execa('git', args)
+  await exec('git', args)
 }
 
 /**
@@ -136,14 +136,14 @@ export async function removeWorktree(path: string, force?: boolean): Promise<voi
  */
 export async function deleteBranch(branch: string, force?: boolean): Promise<void> {
   const flag = force ? '-D' : '-d'
-  await execa('git', ['branch', flag, branch])
+  await exec('git', ['branch', flag, branch])
 }
 
 /**
  * Check if a branch exists locally
  */
 export async function branchExists(branch: string): Promise<boolean> {
-  const { stdout } = await execa('git', ['branch', '--list', branch])
+  const { stdout } = await exec('git', ['branch', '--list', branch])
   return stdout.trim().length > 0
 }
 
@@ -162,7 +162,7 @@ export async function isBranchMerged(_branch: string, _baseBranch = 'main'): Pro
  * Get git remote URL
  */
 export async function getRemoteUrl(remote = 'origin'): Promise<string> {
-  const { stdout } = await execa('git', ['remote', 'get-url', remote])
+  const { stdout } = await exec('git', ['remote', 'get-url', remote])
   return stdout.trim()
 }
 
@@ -187,7 +187,7 @@ export async function getWorktreeStatus(_path: string): Promise<{
  */
 export async function getCreationTime(path: string): Promise<number> {
   try {
-    const stats = await stat(path)
+    const stats = await Bun.file(path).stat()
     return stats.birthtimeMs
   } catch {
     return 0
@@ -199,7 +199,7 @@ export async function getCreationTime(path: string): Promise<number> {
  */
 export async function hasUncommittedChanges(path: string): Promise<boolean> {
   try {
-    const { stdout } = await execa('git', ['-C', path, 'status', '--porcelain'])
+    const { stdout } = await exec('git', ['-C', path, 'status', '--porcelain'])
     return stdout.trim().length > 0
   } catch {
     return false
@@ -214,12 +214,12 @@ export async function getAheadBehind(
   baseBranch: string,
 ): Promise<{ ahead: number; behind: number }> {
   try {
-    const aheadResult = await execa('git', [
+    const aheadResult = await exec('git', [
       'rev-list',
       '--count',
       `${baseBranch}..${branch}`,
     ])
-    const behindResult = await execa('git', [
+    const behindResult = await exec('git', [
       'rev-list',
       '--count',
       `${branch}..${baseBranch}`,
@@ -238,7 +238,7 @@ export async function getAheadBehind(
  * Get current worktree path
  */
 export async function getCurrentWorktreePath(): Promise<string> {
-  const { stdout } = await execa('git', ['rev-parse', '--show-toplevel'])
+  const { stdout } = await exec('git', ['rev-parse', '--show-toplevel'])
   return stdout.trim()
 }
 
@@ -256,7 +256,7 @@ export async function getWorktreeChanges(
   path: string,
 ): Promise<{ modified: string[]; untracked: string[] }> {
   try {
-    const { stdout } = await execa('git', ['-C', path, 'status', '--porcelain'])
+    const { stdout } = await exec('git', ['-C', path, 'status', '--porcelain'])
     const lines = stdout.trim().split('\n').filter(Boolean)
 
     const modified: string[] = []
@@ -282,8 +282,8 @@ export async function getWorktreeChanges(
 export async function getGitDiff(path: string): Promise<string> {
   try {
     // Get staged + unstaged diff
-    const { stdout: unstagedDiff } = await execa('git', ['-C', path, 'diff', '--color'])
-    const { stdout: stagedDiff } = await execa('git', ['-C', path, 'diff', '--cached', '--color'])
+    const { stdout: unstagedDiff } = await exec('git', ['-C', path, 'diff', '--color'])
+    const { stdout: stagedDiff } = await exec('git', ['-C', path, 'diff', '--cached', '--color'])
 
     const parts: string[] = []
     if (stagedDiff.trim()) parts.push(stagedDiff)
@@ -307,7 +307,7 @@ export async function forceRemoveDirectory(path: string): Promise<void> {
  * Prune stale worktree entries
  */
 export async function pruneWorktrees(): Promise<void> {
-  await execa('git', ['worktree', 'prune'])
+  await exec('git', ['worktree', 'prune'])
 }
 
 /**
@@ -319,7 +319,7 @@ export async function hasUnpushedCommits(
 ): Promise<{ hasUnpushed: boolean; noRemote: boolean }> {
   try {
     // Check if branch has a remote tracking branch
-    const { stdout: remoteBranch } = await execa('git', [
+    const { stdout: remoteBranch } = await exec('git', [
       'rev-parse',
       '--abbrev-ref',
       `${branch}@{upstream}`,
@@ -330,7 +330,7 @@ export async function hasUnpushedCommits(
     }
 
     // Check if there are commits not pushed to remote
-    const { stdout } = await execa('git', [
+    const { stdout } = await exec('git', [
       'rev-list',
       '--count',
       `${remoteBranch.trim()}..${branch}`,

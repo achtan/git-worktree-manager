@@ -6,7 +6,7 @@
  */
 
 import { Octokit } from 'octokit'
-import { execa } from 'execa'
+import { exec } from './exec.js'
 
 /**
  * Check if GitHub CLI is available and authenticated
@@ -18,7 +18,7 @@ export async function isGhCliAvailable(): Promise<{
 }> {
   try {
     // Check if gh is installed
-    await execa('gh', ['--version'])
+    await exec('gh', ['--version'])
   } catch {
     return {
       available: false,
@@ -29,7 +29,7 @@ export async function isGhCliAvailable(): Promise<{
 
   try {
     // Check if authenticated
-    await execa('gh', ['auth', 'status'])
+    await exec('gh', ['auth', 'status'])
     return {
       available: true,
       authenticated: true,
@@ -49,7 +49,7 @@ export async function isGhCliAvailable(): Promise<{
  */
 export async function getOctokit(): Promise<Octokit> {
   try {
-    const { stdout } = await execa('gh', ['auth', 'token'])
+    const { stdout } = await exec('gh', ['auth', 'token'])
     const token = stdout.trim()
     return new Octokit({ auth: token })
   } catch (error) {

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * wt - Git Worktree Manager
@@ -12,15 +12,12 @@
  */
 
 import { Command } from 'commander'
-import { createRequire } from 'node:module'
 import { newCommand } from './commands/new.js'
 import { listCommand } from './commands/list.js'
 import { cleanCommand } from './commands/clean.js'
 import { removeCommand } from './commands/remove.js'
 import { configCommand } from './commands/config.js'
-
-const require = createRequire(import.meta.url)
-const pkg = require('../package.json') as { version: string }
+import pkg from '../package.json'
 
 const program = new Command()
 

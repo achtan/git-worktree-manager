@@ -43,20 +43,6 @@ wt list
 wt clean
 ```
 
-### Shell Integration
-
-For the full workflow (create worktree → cd into it → open IDE → start Claude):
-
-```bash
-# Add to ~/.zshrc
-eval "$(wt init)"
-
-# To initialize a new worktree and branch call
-wt feature/my-feature
-# To navigate to it, open WebStorm, and start Claude, run:
-wtl ../repo-worktrees/feature-my-feature
-```
-
 ## Commands
 
 ### `wt <branch-name> [base-branch]`
@@ -237,26 +223,6 @@ Modified:
 ✓ Deleted branch: feature/my-feature
 
 Run 'wt list' to see remaining worktrees
-```
-
-### `wt init`
-
-Output shell function for `~/.zshrc` integration. Creates a `wtl` command that automates the full workflow.
-
-```bash
-# Add to ~/.zshrc:
-eval "$(wt init)"
-```
-
-**The `wtl` function:**
-1. Creates a new worktree (`wt new`)
-2. Changes to the worktree directory
-3. Opens WebStorm
-4. Starts Claude
-
-```bash
-# Usage:
-wtl feature/my-feature
 ```
 
 ## Configuration

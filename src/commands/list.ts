@@ -41,6 +41,7 @@ export function listCommand() {
 
   cmd
     .description('List all worktrees with status')
+    .alias('ls')
     .option('--json', 'Output in JSON format')
     .action(async (options: { json?: boolean }) => {
       const spinner = options.json ? null : createSpinner()

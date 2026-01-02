@@ -10,7 +10,7 @@ import {
   copyConfigFiles,
   loadConfig,
   resolveTemplate,
-  runPostCreateCommands,
+  runPostCreateCommand,
   type TemplateVariables,
 } from '../utils/config.js'
 import {
@@ -114,25 +114,15 @@ export function newCommand() {
           }
         }
 
-        // Run post-create commands
-        if (config.postCreate.length > 0) {
-          // Resolve template variables in commands
-          const resolvedCommands = config.postCreate.map((cmd) =>
-            resolveTemplate(cmd, templateVars),
-          )
-
-          const result = await runPostCreateCommands({
-            worktreePath,
-            commands: resolvedCommands,
-            onCommand: (command) => {
-              console.log(pc.blue(`→ ${command}`))
-            },
-          })
-
-          if (result.failed) {
-            console.log(pc.yellow(`⚠ Command failed: ${result.failed.error}`))
-          } else if (result.executed.length > 0) {
-            console.log(pc.green('✓ Post-create commands completed'))
+        // Run post-create command
+        if (config.postCreate) {
+          const resolvedCommand = resolveTemplate(config.postCreate, templateVars)
+          console.log(pc.blue(`→ ${resolvedCommand}`))
+          const result = await runPostCreateCommand({ worktreePath, command: resolvedCommand })
+          if (!result.success) {
+            console.log(pc.yellow(`⚠ Command failed: ${result.error}`))
+          } else {
+            console.log(pc.green('✓ Post-create command completed'))
           }
         }
 

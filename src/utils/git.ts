@@ -148,14 +148,19 @@ export async function branchExists(branch: string): Promise<boolean> {
 }
 
 /**
- * Check if a branch is merged
+ * Check if a branch is merged into a base branch
  */
-export async function isBranchMerged(_branch: string, _baseBranch = 'main'): Promise<boolean> {
-  // TODO: Implement local merge status check
-  // 1. Run `git branch --merged <baseBranch>`
-  // 2. Check if branch appears in output
-
-  throw new Error('TODO: Implementation pending')
+export async function isBranchMerged(branch: string, baseBranch = 'main'): Promise<boolean> {
+  try {
+    const { stdout } = await exec('git', ['branch', '--merged', baseBranch])
+    const mergedBranches = stdout
+      .split('\n')
+      .map((line) => line.replace(/^\*?\s+/, '').trim())
+      .filter(Boolean)
+    return mergedBranches.includes(branch)
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -167,19 +172,34 @@ export async function getRemoteUrl(remote = 'origin'): Promise<string> {
 }
 
 /**
- * Get worktree status (dirty/clean)
+ * Get worktree status (dirty/clean and ahead/behind)
  */
-export async function getWorktreeStatus(_path: string): Promise<{
+export async function getWorktreeStatus(path: string): Promise<{
   clean: boolean
   ahead: number
   behind: number
 }> {
-  // TODO: Implement status check
-  // 1. Run `git -C <path> status --porcelain --branch`
-  // 2. Parse output for uncommitted changes and tracking info
-  // 3. Return status object
+  try {
+    const { stdout } = await exec('git', ['-C', path, 'status', '--porcelain', '--branch'])
+    const lines = stdout.split('\n')
 
-  throw new Error('TODO: Implementation pending')
+    // First line: ## branch...tracking [ahead N, behind M]
+    const branchLine = lines[0] || ''
+    let ahead = 0
+    let behind = 0
+
+    const aheadMatch = branchLine.match(/ahead (\d+)/)
+    const behindMatch = branchLine.match(/behind (\d+)/)
+    if (aheadMatch) ahead = parseInt(aheadMatch[1], 10)
+    if (behindMatch) behind = parseInt(behindMatch[1], 10)
+
+    // Remaining lines are file changes
+    const clean = lines.slice(1).filter((l) => l.trim()).length === 0
+
+    return { clean, ahead, behind }
+  } catch {
+    return { clean: true, ahead: 0, behind: 0 }
+  }
 }
 
 /**

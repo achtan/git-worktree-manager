@@ -137,18 +137,19 @@ export async function getPRStatus(
 }
 
 /**
- * Check if a branch is merged
+ * Check if a branch is merged via GitHub PR status
  */
 export async function isBranchMerged(
-  _owner: string,
-  _repo: string,
-  _branch: string,
+  owner: string,
+  repo: string,
+  branch: string,
 ): Promise<boolean> {
-  // TODO: Implement merge status check
-  // 1. Query GitHub API to check if branch is merged
-  // 2. Return boolean result
-
-  throw new Error('TODO: Implementation pending')
+  try {
+    const pr = await getPRStatus(owner, repo, branch)
+    return pr?.state === 'merged'
+  } catch {
+    return false
+  }
 }
 
 /**

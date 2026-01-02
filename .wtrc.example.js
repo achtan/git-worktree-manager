@@ -13,5 +13,5 @@ export default {
     '.idea/*.iml',
   ],
   symlink: ['.env'],
-  postCreate: ['npm install'],
+  postCreate: 'npm install',
 }

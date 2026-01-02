@@ -25,6 +25,7 @@ export function removeCommand() {
 
   cmd
     .description('Remove a specific worktree and its branch')
+    .alias('rm')
     .argument('<name>', 'Worktree name (branch name or directory name)')
     .option('--keep-branch', 'Keep the local branch after removing worktree')
     .option(

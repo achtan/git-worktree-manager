@@ -1,5 +1,5 @@
 {
-  "namesymotion-prefix) ": "wt-manager",
+  "name": "wt-manager",
   "version": "1.7.0",
   "description": "CLI tool for managing Git worktrees efficiently with GitHub integration",
   "type": "module",

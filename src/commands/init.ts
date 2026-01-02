@@ -11,7 +11,7 @@ const DEFAULT_CONFIG = `export default {
   worktreePath: '$REPO-worktrees/$DIR',
   copy: [],
   symlink: [],
-  postCreate: [],
+  postCreate: '',
 }
 `
 

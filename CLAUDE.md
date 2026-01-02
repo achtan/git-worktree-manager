@@ -81,10 +81,10 @@ This is a Git worktree manager that creates worktrees in a `<repo>-worktrees/` d
 4. Query GitHub API using Octokit
 5. Gracefully degrade if any step fails
 
-**Post-Create Commands**
-- Configured via `postCreate` array in `.wtrc.js`
-- Commands run sequentially in the new worktree directory
-- Commands ending with ` &` run detached (don't wait for completion)
+**Post-Create Command**
+- Configured via `postCreate` string in `.wtrc.js`
+- Runs via `sh -c` in the new worktree directory
+- Supports shell syntax (`&&`, `||`, pipes, etc.)
 
 ## TypeScript Configuration
 

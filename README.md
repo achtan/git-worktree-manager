@@ -39,8 +39,17 @@ wt new feature/my-feature
 # See all worktrees with PR status
 wt list
 
+# Quick status of current worktree
+wt status
+
+# Copy worktree path to clipboard
+wt path
+
 # Clean up merged/closed worktrees
 wt clean
+
+# Check environment setup
+wt doctor
 ```
 
 ## Commands
@@ -70,7 +79,7 @@ wt new feature/new-feature develop
 - Runs post-create commands from config
 - Copies worktree path to clipboard for easy navigation
 
-### `wt list`
+### `wt list` (alias: `ls`)
 
 List all worktrees with their status, PR information, and branch details.
 
@@ -167,7 +176,7 @@ Removing feature-old...
 Run 'wt list' to see remaining worktrees.
 ```
 
-### `wt remove <name>`
+### `wt remove <name>` (alias: `rm`)
 
 Remove a specific worktree by name. Interactive with safety prompts for uncommitted changes and unpushed commits.
 
@@ -221,6 +230,65 @@ Modified:
 Run 'wt list' to see remaining worktrees
 ```
 
+### `wt path [name]`
+
+Select a worktree interactively and copy its path to clipboard. Useful for quick navigation.
+
+```bash
+# Interactive selection
+wt path
+
+# Fuzzy match and copy directly
+wt path auth
+
+# Quiet mode for scripting (prints raw path, no clipboard)
+wt path -q feature
+cd $(wt path -q feature)
+```
+
+**Arguments:**
+- `[name]` - Optional fuzzy match on branch or directory name
+
+**Options:**
+- `-q, --quiet` - Output path only (for scripting). Requires name argument.
+
+**Behavior:**
+- Without argument: Shows interactive list of worktrees to select from
+- With argument: Fuzzy matches and copies path directly to clipboard
+- With `-q`: Prints raw path to stdout (no spinner, no clipboard, no colors)
+- Shows PR status and ahead/behind counts in the selection list
+
+**Example:**
+```
+? Select worktree:
+❯ ● feature-auth                  (↑2 ↓0) [open]
+  ○ feature-api                   (↑5 ↓1) [draft]
+  ○ bugfix-login                  [merged]
+
+✓ Copied to clipboard: /path/to/repo-worktrees/feature-auth
+```
+
+### `wt status`
+
+Show quick status of the current worktree.
+
+```bash
+wt status
+```
+
+**Output includes:**
+- Branch name with ahead/behind counts
+- PR status and check runs (if available)
+- Modified and untracked file counts
+
+**Example output:**
+```
+feature/auth (↑2 ↓5)
+PR #42 open - ✓ checks passing
+https://github.com/owner/repo/pull/42
+3 modified, 1 untracked
+```
+
 ### `wt init`
 
 Initialize a `.wtrc.js` configuration file in the current repository.
@@ -232,6 +300,37 @@ wt init
 **Behavior:**
 - Creates `.wtrc.js` in the main worktree root with default configuration
 - If config already exists, shows a message and exits without overwriting
+
+### `wt doctor`
+
+Check environment and configuration for potential issues.
+
+```bash
+wt doctor
+```
+
+**Checks performed:**
+| Check | Pass | Warn/Fail |
+|-------|------|-----------|
+| Git installed | Shows version | Error |
+| Inside git repo | Shows repo name | Error |
+| GitHub CLI installed | Shows version | Warning with install link |
+| GitHub CLI authenticated | Shows username | Warning to run `gh auth login` |
+| Worktrees directory | Shows count | Info if none yet |
+| Config file | Shows if found | Info if using defaults |
+
+**Example output:**
+```
+Checks:
+  ✓ Git: 2.43.0
+  ✓ Repository: my-repo
+  ✓ GitHub CLI: 2.40.0
+  ✓ GitHub auth: username
+  ✓ Worktrees: 3 worktrees in ../my-repo-worktrees
+  ○ Config: using defaults (no .wtrc.js)
+
+All checks passed!
+```
 
 ## Configuration
 
@@ -248,10 +347,7 @@ export default {
   symlink: [
     '.env'
   ],
-  postCreate: [
-    'npm install',
-    'code $PATH &'
-  ],
+  postCreate: 'npm install && code $PATH',
 }
 ```
 
@@ -262,11 +358,11 @@ export default {
 | `worktreePath` | string | `$REPO-worktrees/$DIR` | Path template for new worktrees (relative to parent of main repo) |
 | `copy` | string[] | `[]` | Glob patterns for files to copy from main worktree |
 | `symlink` | string[] | `[]` | Glob patterns for files to symlink from main worktree |
-| `postCreate` | string[] | `[]` | Commands to run after creating worktree |
+| `postCreate` | string | `''` | Command to run after creating worktree |
 
 ### Template Variables
 
-Use these variables in `worktreePath` and `postCreate` commands:
+Use these variables in `worktreePath` and `postCreate`:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
@@ -284,20 +380,13 @@ Copy and symlink patterns use gitignore-style globs:
 - `!.idea/workspace.xml` - exclude specific file
 - `*.config.js` - wildcard matching
 
-### Post-Create Commands
+### Post-Create Command
 
-Commands run sequentially in the new worktree directory:
-
-- Commands ending with ` &` run detached (don't wait)
-- Other commands run blocking
-- Execution stops on first failure
+The `postCreate` string runs via `sh -c` in the new worktree directory. Use shell syntax for chaining:
 
 ```javascript
 export default {
-  postCreate: [
-    'npm install',
-    'code $PATH &'
-  ],
+  postCreate: 'npm install && code $PATH',
 }
 ```
 
@@ -346,8 +435,12 @@ Here's a typical workflow using these tools:
 # Create a new worktree for a feature
 wt new feature/add-auth
 
-# Navigate to the worktree
+# Navigate to the worktree (path copied to clipboard)
 cd ../my-repo-worktrees/feature-add-auth
+
+# Or use wt path to get the path
+wt path auth
+# ✓ Copied to clipboard: /path/to/repo-worktrees/feature-add-auth
 
 # Work on your feature...
 git add .
@@ -356,6 +449,11 @@ git push -u origin feature/add-auth
 
 # Create PR via gh CLI
 gh pr create --title "Add authentication" --body "Implements user auth"
+
+# Check status of current worktree
+wt status
+# feature/add-auth (↑1 ↓0)
+# PR #42 open - ✓ checks passing
 
 # Check status of all worktrees
 wt list

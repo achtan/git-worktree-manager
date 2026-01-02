@@ -41,7 +41,7 @@ const WtConfigSchema = z.object({
   worktreePath: z.string().optional(),
   copy: z.array(z.string()).optional(),
   symlink: z.array(z.string()).optional(),
-  postCreate: z.array(z.string()).optional(),
+  postCreate: z.string().optional(),
 })
 
 /**
@@ -51,7 +51,7 @@ export interface WtConfig {
   worktreePath: string
   copy: string[]
   symlink: string[]
-  postCreate: string[]
+  postCreate: string
 }
 
 /**
@@ -72,7 +72,7 @@ export function getDefaults(): WtConfig {
     worktreePath: '$REPO-worktrees/$DIR',
     copy: [],
     symlink: [],
-    postCreate: [],
+    postCreate: '',
   }
 }
 
@@ -175,7 +175,7 @@ export function resolveConfig(config: WtConfig, vars: TemplateVariables): WtConf
     worktreePath: resolveTemplate(config.worktreePath, vars),
     copy: config.copy,
     symlink: config.symlink,
-    postCreate: config.postCreate.map((cmd) => resolveTemplate(cmd, vars)),
+    postCreate: resolveTemplate(config.postCreate, vars),
   }
 }
 
@@ -252,58 +252,24 @@ export async function copyConfigFiles(options: CopyConfigFilesOptions): Promise<
 }
 
 /**
- * Options for running post-create commands
+ * Run post-create command in the worktree directory
  */
-export interface RunPostCreateCommandsOptions {
+export async function runPostCreateCommand(options: {
   worktreePath: string
-  commands: string[]
-  onCommand?: (command: string) => void
-}
+  command: string
+}): Promise<{ success: boolean; error?: string }> {
+  const { worktreePath, command } = options
 
-/**
- * Run post-create commands in the worktree directory
- * Commands ending with ` &` are spawned detached (don't wait)
- * Other commands run blocking and stop on first failure
- */
-export async function runPostCreateCommands(options: RunPostCreateCommandsOptions): Promise<{
-  executed: string[]
-  failed?: { command: string; error: string }
-}> {
-  const { worktreePath, commands, onCommand } = options
-  const executed: string[] = []
+  const proc = Bun.spawn(['sh', '-c', command], {
+    cwd: worktreePath,
+    stdout: 'inherit',
+    stderr: 'inherit',
+    stdin: 'inherit',
+  })
 
-  for (const command of commands) {
-    onCommand?.(command)
-
-    if (command.endsWith(' &')) {
-      // Detached command - spawn and don't wait
-      const cmd = command.slice(0, -2).trim()
-      Bun.spawn(['sh', '-c', cmd], {
-        cwd: worktreePath,
-        stdout: 'ignore',
-        stderr: 'ignore',
-        stdin: 'ignore',
-      })
-      executed.push(command)
-    } else {
-      // Blocking command - wait for completion
-      const proc = Bun.spawn(['sh', '-c', command], {
-        cwd: worktreePath,
-        stdout: 'inherit',
-        stderr: 'inherit',
-        stdin: 'inherit',
-      })
-
-      const exitCode = await proc.exited
-      if (exitCode !== 0) {
-        return {
-          executed,
-          failed: { command, error: `Command exited with code ${exitCode}` },
-        }
-      }
-      executed.push(command)
-    }
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    return { success: false, error: `Command exited with code ${exitCode}` }
   }
-
-  return { executed }
+  return { success: true }
 }

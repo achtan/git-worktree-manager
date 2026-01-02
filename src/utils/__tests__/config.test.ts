@@ -26,7 +26,7 @@ describe('getDefaults', () => {
       worktreePath: '$REPO-worktrees/$DIR',
       copy: [],
       symlink: [],
-      postCreate: [],
+      postCreate: '',
     })
   })
 
@@ -85,7 +85,7 @@ describe('resolveConfig', () => {
       worktreePath: '$REPO-worktrees/$DIR',
       copy: ['.env'],
       symlink: ['node_modules'],
-      postCreate: [],
+      postCreate: '',
     }
     const result = resolveConfig(config, testVars)
     expect(result.worktreePath).toBe('project-worktrees/feature-auth')
@@ -96,7 +96,7 @@ describe('resolveConfig', () => {
       worktreePath: '$REPO-worktrees/$DIR',
       copy: ['.env', '$PATH/file'],
       symlink: [],
-      postCreate: [],
+      postCreate: '',
     }
     const result = resolveConfig(config, testVars)
     expect(result.copy).toEqual(['.env', '$PATH/file'])
@@ -107,24 +107,23 @@ describe('resolveConfig', () => {
       worktreePath: '$REPO-worktrees/$DIR',
       copy: [],
       symlink: ['node_modules', '$DIR/stuff'],
-      postCreate: [],
+      postCreate: '',
     }
     const result = resolveConfig(config, testVars)
     expect(result.symlink).toEqual(['node_modules', '$DIR/stuff'])
   })
 
-  test('transforms postCreate commands', () => {
+  test('transforms postCreate command', () => {
     const config = {
       worktreePath: '$REPO-worktrees/$DIR',
       copy: [],
       symlink: [],
-      postCreate: ['cd $PATH && npm install', 'echo $BRANCH'],
+      postCreate: 'cd $PATH && npm install && echo $BRANCH',
     }
     const result = resolveConfig(config, testVars)
-    expect(result.postCreate).toEqual([
-      'cd /home/user/project-worktrees/feature-auth && npm install',
-      'echo feature/auth',
-    ])
+    expect(result.postCreate).toBe(
+      'cd /home/user/project-worktrees/feature-auth && npm install && echo feature/auth',
+    )
   })
 })
 
@@ -145,7 +144,7 @@ describe('loadConfig', () => {
       worktreePath: '../worktrees/$DIR',
       copy: ['.env'],
       symlink: ['node_modules'],
-      postCreate: ['bun install'],
+      postCreate: 'bun install',
     }`
     await writeFile(join(tempDir, '.wtrc.js'), configContent)
 
@@ -155,7 +154,7 @@ describe('loadConfig', () => {
     expect(result.config.worktreePath).toBe('../worktrees/$DIR')
     expect(result.config.copy).toEqual(['.env'])
     expect(result.config.symlink).toEqual(['node_modules'])
-    expect(result.config.postCreate).toEqual(['bun install'])
+    expect(result.config.postCreate).toBe('bun install')
   })
 
   test('missing file returns defaults', async () => {
@@ -181,7 +180,7 @@ describe('loadConfig', () => {
     expect(result.config.copy).toEqual(['.env'])
     expect(result.config.worktreePath).toBe('$REPO-worktrees/$DIR')
     expect(result.config.symlink).toEqual([])
-    expect(result.config.postCreate).toEqual([])
+    expect(result.config.postCreate).toBe('')
   })
 })
 

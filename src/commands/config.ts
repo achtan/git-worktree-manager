@@ -56,13 +56,11 @@ export function configCommand() {
         console.log(pc.gray('  (none)'))
       }
 
-      // Display postCreate commands
+      // Display postCreate command
       console.log()
       console.log(pc.bold('postCreate:'))
-      if (config.postCreate.length > 0) {
-        for (const command of config.postCreate) {
-          console.log(`  - ${command}`)
-        }
+      if (config.postCreate) {
+        console.log(`  ${config.postCreate}`)
       } else {
         console.log(pc.gray('  (none)'))
       }

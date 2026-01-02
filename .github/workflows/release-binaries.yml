@@ -1,0 +1,40 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: bun-linux-x64
+            output: wt-linux-x64
+          - target: bun-linux-arm64
+            output: wt-linux-arm64
+          - target: bun-darwin-x64
+            output: wt-darwin-x64
+          - target: bun-darwin-arm64
+            output: wt-darwin-arm64
+          - target: bun-windows-x64
+            output: wt-windows-x64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build binary
+        run: bun build ./src/cli.ts --compile --target=${{ matrix.target }} --outfile=${{ matrix.output }}
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.output }}

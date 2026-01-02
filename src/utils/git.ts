@@ -46,7 +46,7 @@ export async function getRepoName(): Promise<string> {
 export async function getDefaultBranch(): Promise<string> {
   try {
     const { stdout } = await exec('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'])
-    return stdout.replace('refs/remotes/origin/', '')
+    return stdout.replace('refs/remotes/origin/', '').trim()
   } catch {
     return 'develop'
   }

@@ -31,7 +31,7 @@ And when you're done? `wt clean` finds all merged/closed PRs and removes their w
 
 ```bash
 # Install globally
-bun install -g .
+bun install -g wt-manager
 
 # Create a new worktree
 wt new feature/my-feature

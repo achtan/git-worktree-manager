@@ -15,7 +15,7 @@ Git worktrees let you work on multiple branches simultaneously—but managing th
 
 `wt` gives you the dashboard Git forgot to include.
 
-![wt list output](https://raw.githubusercontent.com/daviddurika/git-worktree-manager/main/wt-list.png)
+![wt list output](https://raw.githubusercontent.com/achtan/git-worktree-manager/main/wt-list.png)
 
 The `wt list` command shows you everything:
 - All your worktrees with their PR status (open/draft/merged/closed)
